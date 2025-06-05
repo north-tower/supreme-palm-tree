@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  telegram-bot:
+    build: .
+    container_name: telegram-bot
+    restart: unless-stopped
+    environment:
+      - ENV=production
+      - API_ID=your_api_id_here
+      - API_HASH=your_api_hash_here
+      - BOT_TOKEN=your_bot_token_here
+    volumes:
+      - ./logs:/app/logs  # Optional: persist logs
+      - ./bot.session:/app/bot.session  # Persist the session file
+    # Add any environment variables your bot needs

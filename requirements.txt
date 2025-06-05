@@ -1,0 +1,8 @@
+pandas
+numpy
+matplotlib
+telethon
+python-dotenv
+asyncio
+datetime
+websockets
