@@ -19,9 +19,9 @@ class TelegramBotClient:
         load_dotenv()
         self.currency_pairs = CurrencyPairs()
 
-        self.api_id = "26422824"
-        self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
-        self.bot_token ="8129679884:AAGEbC-P6_YFQFzERMiV2UevFx6uXAqSUhs"
+        self.api_id = os.getenv('API_ID')
+        self.api_hash = os.getenv('API_HASH')
+        self.bot_token = os.getenv('BOT_TOKEN')
 
         if not all([self.api_id, self.api_hash, self.bot_token]):
             raise ValueError("Отсутствуют переменные окружения: API_ID, API_HASH или BOT_TOKEN")
@@ -433,7 +433,7 @@ if __name__ == "__main__":
 #     async def show_main_menu(self, event):
 #         print(f"📲 [INFO] Showing main menu to user {event.sender_id}")
 #         await event.respond(
-#             "🎉 Welcome to the Pocket Option Trading Bot!\n\n💹 Let’s start by selecting the type of assets.",
+#             "🎉 Welcome to the Pocket Option Trading Bot!\n\n💹 Let's start by selecting the type of assets.",
 #             buttons=[
 #                 [Button.inline("🔹 OTC", b"otc")],
 #                 [Button.inline("🔹 Regular Assets", b"regular_assets")]
