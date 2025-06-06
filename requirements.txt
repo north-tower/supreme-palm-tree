@@ -5,3 +5,4 @@ telethon
 python-dotenv
 asyncio
 datetime
+websockets
