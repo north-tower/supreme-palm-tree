@@ -18,56 +18,99 @@ async def fetch_summary(asset, period, token):
 
     websocket = None
     try:
-        websocket = await websockets.connect(url, extra_headers=headers, timeout=10)
-        print("Connected to WebSocket server")
+        print(f"🔄 [ИНФО] Connecting to WebSocket server for {asset}")
+        async with websockets.connect(url, additional_headers=headers) as websocket:
+            print("✅ [ИНФО] Connected to WebSocket server")
 
-        await websocket.send("40")  # Initial connection message
+            # Socket.IO v4 handshake
+            print("🔄 [ИНФО] Starting Socket.IO handshake")
+            await websocket.send("40")
+            response = await websocket.recv()
+            print(f"📥 [ИНФО] Initial response: {response}")
 
-        auth_message = ["auth", {"token": token, "balance": 50000}]
-        await websocket.send(f"42{json.dumps(auth_message)}")  # Authentication message
+            # Authentication
+            print("🔄 [ИНФО] Authenticating...")
+            auth_message = ["auth", {"token": token, "balance": 50000}]
+            await websocket.send(f"42{json.dumps(auth_message)}")
+            
+            # Wait for authentication
+            while True:
+                response = await websocket.recv()
+                if isinstance(response, bytes):
+                    response = response.decode('utf-8')
+                print(f"📥 [ИНФО] Auth response: {response}")
+                
+                if "successauth" in response.lower():
+                    print("✅ [ИНФО] Authentication successful!")
+                    break
+                elif "error" in response.lower():
+                    print("⚠️ [ОШИБКА] Authentication failed!")
+                    return None, None
 
-        change_symbol_message = ["changeSymbol", {"asset": asset, "period": 1}]
-        await websocket.send(f"42{json.dumps(change_symbol_message)}")  # Change symbol message
-
-        async for message in websocket:
-            if isinstance(message, bytes):
+            # Change symbol
+            print(f"🔄 [ИНФО] Changing symbol to {asset}")
+            symbol_message = ["changeSymbol", {"asset": asset, "period": 1}]
+            await websocket.send(f"42{json.dumps(symbol_message)}")
+            
+            # Wait for history data and collect it
+            history_data = []
+            data_collection_timeout = 10  # seconds to collect data
+            start_time = asyncio.get_event_loop().time()
+            
+            while True:
                 try:
-                    decoded_message = json.loads(message.decode('utf-8'))
-                    if isinstance(decoded_message, dict):
-                        history = decoded_message.get("history", [])
+                    response = await asyncio.wait_for(websocket.recv(), timeout=1)
+                    if isinstance(response, bytes):
+                        response = response.decode('utf-8')
+                    
+                    # Handle ping messages
+                    if response.startswith("2"):
+                        await websocket.send("3")
+                        continue
+                    
+                    # Handle data messages
+                    if response.startswith("["):
+                        try:
+                            data = json.loads(response)
+                            if isinstance(data, list) and len(data) > 0:
+                                # Check if this is a price data point (should have 3 elements: symbol, timestamp, price)
+                                if len(data[0]) == 3 and isinstance(data[0][0], str) and isinstance(data[0][1], (int, float)) and isinstance(data[0][2], (int, float)):
+                                    # Only collect data for our target asset
+                                    if data[0][0] == asset:
+                                        history_data.append(data[0])
+                                        print(f"📥 [ИНФО] Received data point for {asset}: {data[0]}")
+                        except json.JSONDecodeError:
+                            continue
+                    
+                    # Check if we've collected enough data or timeout
+                    if len(history_data) >= 100 or (asyncio.get_event_loop().time() - start_time) > data_collection_timeout:
+                        print(f"✅ [ИНФО] Collected {len(history_data)} data points")
+                        break
+                        
+                except asyncio.TimeoutError:
+                    # Check if we've collected enough data
+                    if len(history_data) >= 100:
+                        print(f"✅ [ИНФО] Collected {len(history_data)} data points")
+                        break
+                    continue
 
-                        if history:
-                            history_data = [
-                                [entry[0], entry[1]]
-                                for entry in history
-                                if isinstance(entry, list) and len(entry) == 2
-                            ]
-
-                            history_summary = HistorySummary(history_data, time_minutes=period)
-
-                            # Get all indicators
-                            results = history_summary.get_all_indicators()
-                            await websocket.close()
-
-                            return results, history_data
-
-                except (ValueError, KeyError, TypeError) as e:
-                    print(f"Error processing binary message: {e}")
+            if history_data:
+                print(f"✅ [ИНФО] Processing {len(history_data)} data points")
+                # Convert the data to the format expected by HistorySummary
+                formatted_data = [[point[1], point[2]] for point in history_data]  # [timestamp, price]
+                history_summary = HistorySummary(formatted_data, time_minutes=period)
+                results = history_summary.get_all_indicators()
+                return results, formatted_data
+            else:
+                print("⚠️ [ОШИБКА] No history data collected")
+                return None, None
 
     except websockets.ConnectionClosed as e:
-        
-        print(f"Connection closed: {e.reason}")
-    except asyncio.TimeoutError:
-        print("Connection timed out. Unable to connect to WebSocket server.")
+        print(f"⚠️ [ОШИБКА] Connection closed: {e.reason}")
     except Exception as e:
-        await websocket.close()
-        print(f"An unexpected error occurred: {e}")
-    finally:
-        if websocket and not websocket.closed:
-            await websocket.close()
-            print("WebSocket connection closed.")
-
-    return None
+        print(f"⚠️ [ОШИБКА] Unexpected error: {str(e)}")
+    
+    return None, None
 
 
 async def main():

@@ -19,9 +19,9 @@ class TelegramBotClient:
         load_dotenv()
         self.currency_pairs = CurrencyPairs()
 
-        self.api_id = os.getenv('API_ID')
-        self.api_hash = os.getenv('API_HASH')
-        self.bot_token = os.getenv('BOT_TOKEN')
+        self.api_id = "26422824"
+        self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
+        self.bot_token ="8129679884:AAGEbC-P6_YFQFzERMiV2UevFx6uXAqSUhs"
 
         if not all([self.api_id, self.api_hash, self.bot_token]):
             raise ValueError("Отсутствуют переменные окружения: API_ID, API_HASH или BOT_TOKEN")
@@ -155,7 +155,7 @@ class TelegramBotClient:
                 asset = asset[:-3] + "_otc"
 
             period = time_choice
-            token ="_p_9FptVKA"
+            token = "cZoCQNWriz"  # Using the working token
 
             # Notify the user about the process
             await response.respond(
@@ -165,6 +165,12 @@ class TelegramBotClient:
 
             # Call fetch_summary with error handling
             results, history_data = await self.fetch_summary_with_handling(asset, period, token)
+
+            if results is None or history_data is None:
+                await response.respond(
+                    "⚠️ Извините, не удалось получить данные для анализа. Пожалуйста, попробуйте другую пару или время."
+                )
+                return
 
             if results and history_data:
                 # Format results (optional)
@@ -233,20 +239,17 @@ class TelegramBotClient:
 
 
     async def fetch_summary_with_handling(self, asset, period, token):
-        """
-        Обертка для fetch_summary для обработки с использованием WebSocket.
-        """
         try:
+            print(f"🔄 [ИНФО] Fetching data for {asset} with period {period}")
             results, history_data = await fetch_summary(asset, period, token)
-
-            if results:
-                return results, history_data
-            else:
-                print("⚠️ [ПРЕДУПРЕЖДЕНИЕ] Результаты не получены. Может потребоваться повторная попытка.")
+            
+            if results is None or history_data is None:
+                print(f"⚠️ [ОШИБКА] Failed to fetch data for {asset}")
                 return None, None
-
+            
+            return results, history_data
         except Exception as e:
-            print(f"⚠️ [ОШИБКА] Ошибка в fetch_summary_with_handling: {e}")
+            print(f"⚠️ [ОШИБКА] Ошибка в fetch_summary_with_handling: {str(e)}")
             return None, None
 
 
