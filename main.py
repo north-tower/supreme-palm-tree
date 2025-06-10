@@ -138,6 +138,14 @@ class TelegramBotClient:
         Обработать выбранную валютную пару и время истечения.
         """
         try:
+            # Delete previous messages
+            try:
+                async for message in self.client.iter_messages(response.sender_id, limit=10):
+                    if message.id != response.message_id:  # Don't delete the current message
+                        await message.delete()
+            except Exception as e:
+                print(f"⚠️ [ОШИБКА] Не удалось удалить предыдущие сообщения: {e}")
+
             # Update time mapping to match the `time_choice` values
             time_mapping = {
                 1: "1 минута",
@@ -193,7 +201,6 @@ class TelegramBotClient:
                     await self.client.send_file(
                         response.sender_id,
                         temp_file_path,  # Sending the temporary PNG file
-                        
                         force_document=False  # Tells Telethon to send it as a photo
                     )
                     await response.respond(
