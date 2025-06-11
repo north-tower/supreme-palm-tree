@@ -11,10 +11,18 @@ from Analysis import HistorySummary
 import tempfile
 from languages import LANGUAGES, DEFAULT_LANGUAGE, LANGUAGE_BUTTONS
 from functools import partial
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class TelegramBotClient:
     def __init__(self):
-        print("🔄 [INFO] Loading environment variables from .env file.")
+        logger.info("Loading environment variables from .env file.")
         load_dotenv()
         self.currency_pairs = CurrencyPairs()
         self.user_languages = {}  # Store user language preferences
@@ -27,6 +35,7 @@ class TelegramBotClient:
             raise ValueError("Missing environment variables: API_ID, API_HASH, or BOT_TOKEN")
 
         self.client = None
+        self.summary = None  # Initialize summary attribute
 
     def get_user_language(self, user_id):
         """Get user's preferred language or return default"""
@@ -60,6 +69,8 @@ class TelegramBotClient:
 
             # Define the start command handler
             self.client.add_event_handler(self.handle_start_command, events.NewMessage(pattern='/start'))
+            # Define the language command handler
+            self.client.add_event_handler(self.handle_language_command, events.NewMessage(pattern='/language'))
             # Define the language selection handler
             self.client.add_event_handler(self.handle_language_selection, events.CallbackQuery(pattern='^lang:'))
             # Define the asset selection handler
@@ -73,24 +84,52 @@ class TelegramBotClient:
     async def handle_start_command(self, event):
         await self.show_language_selection(event)
 
+    async def handle_language_command(self, event):
+        """Handle the /language command to change language"""
+        await self.show_language_selection(event)
+
     async def show_language_selection(self, event):
         """Show language selection menu"""
+        user_id = event.sender_id
+        current_lang = self.get_user_language(user_id)
+        
+        # Get current language name
+        current_lang_name = LANGUAGE_BUTTONS[current_lang]
+        
         buttons = [
             [Button.inline(text, f"lang:{lang}")] 
             for lang, text in LANGUAGE_BUTTONS.items()
         ]
         
+        # Add a "Cancel" button if this is a language change (not initial selection)
+        if isinstance(event, events.NewMessage.Event):
+            buttons.append([Button.inline("❌ Cancel", "cancel_lang")])
+        
         await event.respond(
-            "🌍 Please select your language / Por favor, seleccione su idioma / Пожалуйста, выберите ваш язык:",
+            f"🌍 Please select your language / Por favor, seleccione su idioma / Пожалуйста, выберите ваш язык:\n\n"
+            f"Current language / Idioma actual / Текущий язык: {current_lang_name}",
             buttons=buttons
         )
 
     async def handle_language_selection(self, event):
         """Handle language selection"""
+        if event.data.decode('utf-8') == "cancel_lang":
+            await event.answer("Language selection cancelled")
+            return
+            
         lang = event.data.decode('utf-8').split(':')[1]
         user_id = event.sender_id
         self.user_languages[user_id] = lang
-        await self.show_main_menu(event)
+        
+        # Get the language name for the confirmation message
+        lang_name = LANGUAGE_BUTTONS[lang]
+        
+        # Send confirmation message in the new language
+        await event.answer(f"Language changed to {lang_name}")
+        
+        # If this was triggered by /language command, show main menu
+        if isinstance(event, events.CallbackQuery.Event):
+            await self.show_main_menu(event)
 
     async def handle_asset_selection(self, event):
         selected_asset = event.data.decode('utf-8')
@@ -155,62 +194,47 @@ class TelegramBotClient:
             print(f"⚠️ [ERROR] Error in process selection: {e}")
 
     async def process_selection(self, response, selected_pair, time_choice):
+        """Process the user's selection and generate signals"""
         try:
             user_id = response.sender_id
             lang = self.get_user_language(user_id)
             
-            # Delete previous messages
-            try:
-                chat = await self.client.get_entity(user_id)
-                messages = await self.client.get_messages(chat, limit=20)
-                
-                for message in reversed(messages):
-                    try:
-                        if message.id != response.message_id:
-                            await message.delete()
-                            print(f"✅ [INFO] Deleted message {message.id}")
-                    except Exception as msg_error:
-                        print(f"⚠️ [ERROR] Failed to delete message {message.id}: {msg_error}")
-                        continue
-                
-                print("✅ [INFO] Chat cleanup completed")
-            except Exception as e:
-                print(f"⚠️ [ERROR] Failed to clean chat: {e}")
-
+            # Clean up the pair name
             cleaned_pair = remove_country_flags(selected_pair)
             asset = "_".join(cleaned_pair.replace("/", "").split())
-
+            
             if asset.endswith("OTC"):
                 asset = asset[:-3] + "_otc"
-
+            
             period = time_choice
             token = "cZoCQNWriz"
-
+            
             await response.respond(
                 self.get_text(user_id, 'processing', 
                             pair=selected_pair, 
                             time=LANGUAGES[lang]['time_options'][time_choice])
             )
-
+            
             results, history_data = await self.fetch_summary_with_handling(asset, period, token)
-
+            
             if results is None or history_data is None:
                 await response.respond(self.get_text(user_id, 'error_no_data'))
+                await self.show_main_menu(response)
                 return
-
+            
             if results and history_data:
-                history_summary = HistorySummary(history_data, time_choice)
-                signal_info = history_summary.generate_signal(selected_pair, time_choice)
-
+                self.summary = HistorySummary(history_data, time_choice)
+                signal_info = self.summary.generate_signal(lang=lang)
+                
                 chart_plotter = TradingChartPlotter(history_data, selected_pair, 
                                                   LANGUAGES[lang]['time_options'][time_choice])
                 chart_image = chart_plotter.plot_trading_chart()
-
+                
                 if chart_image:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
                         temp_file_path = temp_file.name
                         temp_file.write(chart_image.read())
-
+                    
                     await self.client.send_file(
                         user_id,
                         temp_file_path,
@@ -226,27 +250,49 @@ class TelegramBotClient:
                                     time=LANGUAGES[lang]['time_options'][time_choice],
                                     signal=signal_info)
                     )
+                
+                # Show the menu after the signal response
+                await self.show_main_menu(response)
             else:
                 await response.respond(
                     self.get_text(user_id, 'error_results', pair=asset)
                 )
-
+                await self.show_main_menu(response)
+            
         except Exception as e:
-            print(f"⚠️ [ERROR] Error in process_selection: {e}")
-        
-        await self.show_main_menu(response)
+            logger.error(f"Error in process_selection: {e}")
+            await response.respond(self.get_text(user_id, 'error_results', pair=selected_pair))
+            await self.show_main_menu(response)
 
-    async def show_main_menu(self, event):
-        user_id = event.sender_id
-        lang = self.get_user_language(user_id)
-        
-        await event.respond(
-            self.get_text(user_id, 'welcome'),
-            buttons=[
-                [Button.inline(LANGUAGES[lang]['buttons']['otc'], b"otc")],
-                [Button.inline(LANGUAGES[lang]['buttons']['regular'], b"regular_assets")]
+    async def show_main_menu(self, event, message=None):
+        """Show the main menu with all available commands."""
+        try:
+            user_id = event.sender_id
+            lang = self.get_user_language(user_id)
+            
+            # Get the menu text in the user's language
+            menu_text = self.get_text(user_id, 'welcome')
+            
+            # Create buttons for OTC and Regular pairs
+            buttons = [
+                [Button.inline(LANGUAGES[lang]['buttons']['otc'], b'otc')],
+                [Button.inline(LANGUAGES[lang]['buttons']['regular'], b'regular')]
             ]
-        )
+            
+            # If there's an existing message, edit it
+            if message:
+                await message.edit(menu_text, buttons=buttons)
+            else:
+                # Otherwise send a new message
+                await event.respond(menu_text, buttons=buttons)
+                
+        except Exception as e:
+            print(f"Error showing main menu: {e}")
+            # Try to send a basic message if the menu fails
+            try:
+                await event.respond("Error showing menu. Please try /start")
+            except:
+                pass
 
     async def fetch_summary_with_handling(self, asset, period, token):
         try:
