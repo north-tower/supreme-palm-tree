@@ -3,33 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import io
 import random
-from languages import LANGUAGES, DEFAULT_LANGUAGE
 
 class HistorySummary:
     def __init__(self, history_data, time_minutes=3):
-        try:
-            print(f"[DEBUG] Input data format: {history_data[0] if history_data else 'No data'}")
-            # Convert the data to the format expected by the DataFrame
-            # Each point in history_data is [symbol, timestamp, price]
-            formatted_data = []
-            for point in history_data:
-                if len(point) == 3:  # Ensure we have all three elements
-                    timestamp = point[1]
-                    price = point[2]
-                    formatted_data.append([timestamp, price])
-                else:
-                    print(f"[WARNING] Skipping invalid data point: {point}")
-            
-            print(f"[DEBUG] Formatted data: {formatted_data[0] if formatted_data else 'No data'}")
-            self.history_df = pd.DataFrame(formatted_data, columns=["Timestamp", "Value"])
-            print(f"[DEBUG] DataFrame created with shape: {self.history_df.shape}")
-            self.time_minutes = time_minutes
-            self.indicators = self.calculate_indicators()
-        except Exception as e:
-            print(f"[ERROR] Failed to initialize HistorySummary: {str(e)}")
-            print(f"[DEBUG] history_data type: {type(history_data)}")
-            print(f"[DEBUG] history_data sample: {history_data[:2] if history_data else 'No data'}")
-            raise
+        self.history_df = pd.DataFrame(history_data, columns=["Timestamp", "Value"])
+        self.time_minutes = time_minutes
      
 
     def filter_recent_data(self):
@@ -323,67 +301,133 @@ class HistorySummary:
             print(f"Error calculating Fibonacci Retracement: {e}")
             return None
 
-    def calculate_indicators(self):
-        """Calculate all technical indicators"""
+    def get_all_indicators(self):
         try:
+            summary = self.get_summary()
+
             indicators = {
-                'RSI': self.calculate_rsi(),
-                'EMA': self.calculate_ema(span=14),
-                'MACD': self.calculate_macd(),
-                'Bollinger Bands': self.calculate_bollinger_bands(),
-                'Stochastic Oscillator': self.calculate_stochastic_oscillator(),
-                'Support and Resistance': self.calculate_support_resistance(),
-                'Keltner Channels': self.calculate_keltner_channels(),
-                'Parabolic SAR': self.calculate_parabolic_sar(),
-                'Fibonacci Retracement': self.calculate_fibonacci_retracement()
+                "RSI": self.calculate_rsi(),
+                "EMA": self.calculate_ema(span=14),
+                "MACD": self.calculate_macd(),
+                "Bollinger Bands": self.calculate_bollinger_bands(),
+                "Stochastic Oscillator": self.calculate_stochastic_oscillator(),
+                "Support and Resistance": self.calculate_support_resistance(),
+                "Keltner Channels": self.calculate_keltner_channels(),
+                "Parabolic SAR": self.calculate_parabolic_sar(),
+                "Fibonacci Retracement": self.calculate_fibonacci_retracement()
             }
-            return indicators
-        except Exception as e:
-            print(f"Error calculating indicators: {e}")
-            return {}
 
-    def generate_signal(self, lang='en'):
-        """Generate trading signal with language support"""
+            return {
+                "Summary": summary,
+                "Indicators": indicators
+            }
+        except Exception as e:
+            print(f"Error getting all indicators: {e}")
+            return None
+        
+    def generate_signal(self, currency_pair, expiration_time):
         try:
-            # Get language-specific text
-            texts = LANGUAGES.get(lang, LANGUAGES[DEFAULT_LANGUAGE])
-            
-            # Get support and resistance levels
-            support_resistance = self.indicators.get('Support and Resistance', {})
-            support = support_resistance.get('Support')
-            resistance = support_resistance.get('Resistance')
-            
-            if support is None or resistance is None:
-                # Try to get alternate support/resistance levels
-                support, resistance = self.get_alternate_support_resistance(self.indicators)
-            
-            # Get current price (last price in history)
-            current_price = self.history_df["Value"].iloc[-1]
-            
-            # Determine signal based on price position
-            if current_price > resistance:
-                signal = "🟥 SELL" if lang == 'en' else "🟥 ПРОДАТЬ" if lang == 'ru' else "🟥 VENDER"
-            elif current_price < support:
-                signal = "🟩 BUY" if lang == 'en' else "🟩 КУПИТЬ" if lang == 'ru' else "🟩 COMPRAR"
-            else:
-                signal = "⚪ WAIT" if lang == 'en' else "⚪ ЖДАТЬ" if lang == 'ru' else "⚪ ESPERAR"
-            
-            # Format the signal message
-            signal_text = f"""📊🔮 *{texts.get('signal_title', 'Your magic signal is ready!')}* 🔮📊  
-            - 💹 **{texts.get('signal', 'Signal')}:** {signal}  
-            - 📈 **{texts.get('support', 'Support Level')}:** {support:.3f} 🔻  
-            - 📉 **{texts.get('resistance', 'Resistance Level')}:** {resistance:.3f} 🔺  
+            self.filter_recent_data()
+            print("[INFO] Recent data filtered successfully.")
 
-            ✨💡 *{texts.get('magic_message', 'Market magic is on your side! Good luck trading!')}* ✨  
+            # Fetch all indicators
+            indicators_data = self.get_all_indicators().get("Indicators", {})
+            print(f"[INFO] Retrieved indicators: {indicators_data}")
 
-            🔁 {texts.get('new_signal', 'Click the button below to get a new signal!')} 🔁
+            # Initialize signal and variables
+            signal = "❌ НЕТ СИГНАЛА"
+            support_level = None
+            resistance_level = None
+            used_indicators = []
+
+            # Sequentially check indicators
+            def process_rsi():
+                rsi = indicators_data.get("RSI", None)
+                if isinstance(rsi, (int, float)):
+                    if rsi > 70:
+                        return "🟩 КУПИТЬ", f"RSI: {rsi} → Перекуплен (Сигнал на покупку)"
+                    elif rsi < 50:
+                        return "🟥 ПРОДАТЬ", f"RSI: {rsi} → Перепродан (Сигнал на продажу)"
+                return None, None
+
+            def process_ema():
+                ema = indicators_data.get("EMA", None)
+                if isinstance(ema, (int, float)):
+                    if ema > 0:
+                        return "🟩 КУПИТЬ", f"EMA: {ema} → Положительная тенденция (Сигнал на покупку)"
+                    elif ema < 0:
+                        return "🟥 ПРОДАТЬ", f"EMA: {ema} → Отрицательная тенденция (Сигнал на продажу)"
+                return None, None
+
+            def process_macd():
+                macd_data = indicators_data.get("MACD", None)
+                if macd_data:
+                    macd_line, signal_line = macd_data
+                    if isinstance(macd_line, (int, float)) and isinstance(signal_line, (int, float)):
+                        if macd_line > signal_line:
+                            return "🟩 КУПИТЬ", f"MACD: {macd_line} > {signal_line} → Бычи (Сигнал на покупку)"
+                        elif macd_line < signal_line:
+                            return "🟥 ПРОДАТЬ", f"MACD: {macd_line} < {signal_line} → Медвежий (Сигнал на продажу)"
+                return None, None
+
+            def process_bollinger():
+                bollinger = indicators_data.get("Bollinger Bands", None)
+                if bollinger:
+                    lower_band, upper_band = bollinger
+                    if isinstance(lower_band, (int, float)) and isinstance(upper_band, (int, float)):
+                        if lower_band < 0:
+                            return "🟩 КУПИТЬ", f"Bollinger Bands: Lower: {lower_band}, Upper: {upper_band} → Прорыв волатильности (Сигнал на покупку)"
+                        elif upper_band > 0:
+                            return "🟥 ПРОДАТЬ", f"Bollinger Bands: Lower: {lower_band}, Upper: {upper_band} → Сопротивление цены (Сигнал на продажу)"
+                return None, None
+
+            def process_stochastic():
+                stochastic = indicators_data.get("Stochastic Oscillator", None)
+                if isinstance(stochastic, (int, float)):
+                    if stochastic > 80:
+                        return "🟥 ПРОДАТЬ", f"Stochastic Oscillator: {stochastic} → Перекуплен (Сигнал на продажу)"
+                    elif stochastic < 20:
+                        return "🟩 КУПИТЬ", f"Stochastic Oscillator: {stochastic} → Перепродан (Сигнал на покупку)"
+                return None, None
+
+            # List of processing functions
+            processing_functions = [
+                process_rsi,
+                process_ema,
+                process_macd,
+                process_bollinger,
+                process_stochastic
+            ]
+
+            # Iterate over processing functions
+            for process_function in processing_functions:
+                signal_result, description = process_function()
+                if signal_result:
+                    signal = signal_result
+                    used_indicators.append(description)
+                    break  # Stop checking further indicators if a signal is found
+
+           
+            support_level, resistance_level = self.get_alternate_support_resistance(indicators_data)
+
+            # Prepare result
+            result = f"""📊🔮 *Ваш магический сигнал готов!* 🔮📊  
+            - 💹 **Сигнал:** {signal}  
+            - 📈 **Уровень поддержки:** {support_level or 'N/A'} 🔻  
+            - 📉 **Уровень сопротивления:** {resistance_level or 'N/A'} 🔺  
+
+            ✨💡 *Магия рынка на вашей стороне! Удачных сделок!* ✨  
+
+            🔁 Нажмите кнопку ниже, чтобы получить новый сигнал! 🔁
             """
-            
-            return signal_text
+            print(f"[INFO] Final result prepared: {result}")
+            return result
 
         except Exception as e:
-            print(f"Error generating signal: {e}")
-            return "Error generating signal"
+            print(f"[ERROR] Critical error in generate_signal: {e}")
+            return "❌ НЕТ СИГНАЛА - Ошибка обработки данных"
+
+
 
     def get_alternate_support_resistance(self, indicators_data):
         """

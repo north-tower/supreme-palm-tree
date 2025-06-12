@@ -10,52 +10,49 @@ rcParams["font.family"] = "DejaVu Sans"
 
 class TradingChartPlotter:
     def __init__(self, history_data, currency_pair, time_frame):
-        # Convert the data to the format expected by the DataFrame
-        # Each point in history_data is [symbol, timestamp, price]
-        formatted_data = [[point[1], point[2]] for point in history_data]  # [timestamp, price]
-        self.history_df = pd.DataFrame(formatted_data, columns=["Timestamp", "Value"])
+        self.history_df = pd.DataFrame(history_data, columns=["Время", "Значение"])
         self.currency_pair = currency_pair
         self.time_frame = time_frame
 
     def filter_recent_data(self):
         try:
             if not self.history_df.empty:
-                self.history_df["Timestamp"] = pd.to_datetime(self.history_df["Timestamp"], unit='s')
+                self.history_df["Время"] = pd.to_datetime(self.history_df["Время"], unit='s')
         except Exception as e:
-            print(f"Error filtering data: {e}")
+            print(f"Ошибка фильтрации данных: {e}")
 
     def plot_trading_chart(self, outlier_threshold=1.5):
         try:
             self.filter_recent_data()
 
             if self.history_df.empty:
-                print("No data available for plotting.")
+                print("Нет данных для построения графика.")
                 return None
 
-            mean_value = self.history_df["Value"].mean()
-            std_dev = self.history_df["Value"].std()
+            mean_value = self.history_df["Значение"].mean()
+            std_dev = self.history_df["Значение"].std()
             upper_bound = mean_value + outlier_threshold * std_dev
             lower_bound = mean_value - outlier_threshold * std_dev
 
-            self.history_df["Outlier"] = (self.history_df["Value"] > upper_bound) | (self.history_df["Value"] < lower_bound)
+            self.history_df["Выброс"] = (self.history_df["Значение"] > upper_bound) | (self.history_df["Значение"] < lower_bound)
 
             # Set the background and line styles
             plt.figure(figsize=(12, 6))
             plt.style.use('dark_background')  # Dark background style
 
-            plt.plot(self.history_df["Timestamp"], self.history_df["Value"], label="Price", color="#00BFFF", alpha=0.8)
-            outliers = self.history_df[self.history_df["Outlier"]]
-            plt.scatter(outliers["Timestamp"], outliers["Value"], color="red", label="Outliers", zorder=5)
+            plt.plot(self.history_df["Время"], self.history_df["Значение"], label="Значение", color="#00BFFF", alpha=0.8)
+            outliers = self.history_df[self.history_df["Выброс"]]
+            plt.scatter(outliers["Время"], outliers["Значение"], color="red", label="Выбросы", zorder=5)
 
             # Add average and boundaries
-            plt.axhline(mean_value, color="green", linestyle="--", label="Mean", linewidth=2)
-            plt.axhline(upper_bound, color="orange", linestyle="--", label="Upper Bound", linewidth=2)
-            plt.axhline(lower_bound, color="orange", linestyle="--", label="Lower Bound", linewidth=2)
+            plt.axhline(mean_value, color="green", linestyle="--", label="Среднее", linewidth=2)
+            plt.axhline(upper_bound, color="orange", linestyle="--", label="Верхняя граница", linewidth=2)
+            plt.axhline(lower_bound, color="orange", linestyle="--", label="Нижняя граница", linewidth=2)
 
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            plt.title(f"Trading Chart for {self.currency_pair} ({self.time_frame})\nCreated {current_time}", fontsize=16, color="white")
-            plt.xlabel("Time", fontsize=12, color="white")
-            plt.ylabel("Price", fontsize=12, color="white")
+            plt.title(f"График торгов для {self.currency_pair} ({self.time_frame})\nСоздано {current_time}", fontsize=16, color="white")
+            plt.xlabel("Время", fontsize=12, color="white")
+            plt.ylabel("Значение", fontsize=12, color="white")
 
             plt.legend(loc="upper left", fontsize=10)
             plt.grid(alpha=0.3)
@@ -70,7 +67,7 @@ class TradingChartPlotter:
             return image_data
 
         except Exception as e:
-            print(f"Error plotting chart: {e}")
+            print(f"Ошибка построения графика: {e}")
             return None
 
 

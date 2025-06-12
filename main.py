@@ -5,64 +5,45 @@ import asyncio
 from datetime import datetime
 from CurrencyPairs import CurrencyPairs
 from demo_test import fetch_summary
-from Visualizer import TradingChartPlotter
+from Visualizer   import  TradingChartPlotter
 from Helpers import *
 from Analysis import HistorySummary
 import tempfile
-from languages import LANGUAGES, DEFAULT_LANGUAGE, LANGUAGE_BUTTONS
+    # Callback: Prompt for time selection
 from functools import partial
-import logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 class TelegramBotClient:
     def __init__(self):
-        logger.info("Loading environment variables from .env file.")
+        print("🔄 [ИНФО] Загрузка переменных окружения из файла .env.")
         load_dotenv()
         self.currency_pairs = CurrencyPairs()
-        self.user_languages = {}  # Store user language preferences
-        self.last_message_ids = {}  # Store last message IDs for each user
 
         self.api_id = "26422824"
         self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
-        self.bot_token = "8129679884:AAGEbC-P6_YFQFzERMiV2UevFx6uXAqSUhs"
+        self.bot_token ="8129679884:AAGEbC-P6_YFQFzERMiV2UevFx6uXAqSUhs"
 
         if not all([self.api_id, self.api_hash, self.bot_token]):
-            raise ValueError("Missing environment variables: API_ID, API_HASH, or BOT_TOKEN")
+            raise ValueError("Отсутствуют переменные окружения: API_ID, API_HASH или BOT_TOKEN")
 
         self.client = None
-        self.summary = None  # Initialize summary attribute
-
-    def get_user_language(self, user_id):
-        """Get user's preferred language or return default"""
-        return self.user_languages.get(user_id, DEFAULT_LANGUAGE)
-
-    def get_text(self, user_id, key, **kwargs):
-        """Get translated text for the given key"""
-        lang = self.get_user_language(user_id)
-        text = LANGUAGES[lang][key]
-        return text.format(**kwargs) if kwargs else text
 
     async def connect(self):
         try:
-            print("🚀 [INFO] Initializing Telegram Client for the bot.")
+            print("🚀 [ИНФО] Инициализация Telegram клиента для бота.")
             self.client = TelegramClient('bot', self.api_id, self.api_hash)
             await self.client.start(bot_token=self.bot_token)
-            print("✅ [INFO] Successfully connected to Telegram.")
+            print("✅ [ИНФО] Успешное подключение к Telegram.")
         except Exception as e:
-            print(f"⚠️ [ERROR] Failed to connect: {e}")
+            print(f"⚠️ [ОШИБКА] Не удалось подключиться: {e}")
 
-    def generate_buttons(self, pairs, selected_asset, user_id):
+    def generate_buttons(self, pairs, selected_asset):
         buttons = [
             [Button.inline(pair, f"pair:{pair}") for pair in pairs[i:i+2]]
             for i in range(0, len(pairs), 2)
         ]
-        return buttons
+        return buttons  # Removed the 'show_all' and 'show_less' logic
+
 
     async def start_bot(self):
         try:
@@ -70,323 +51,416 @@ class TelegramBotClient:
 
             # Define the start command handler
             self.client.add_event_handler(self.handle_start_command, events.NewMessage(pattern='/start'))
-            # Define the language command handler
-            self.client.add_event_handler(self.handle_language_command, events.NewMessage(pattern='/language'))
-            # Define the language selection handler
-            self.client.add_event_handler(self.handle_language_selection, events.CallbackQuery(pattern='^lang:'))
+
             # Define the asset selection handler
             self.client.add_event_handler(self.handle_asset_selection, events.CallbackQuery)
 
             await self.client.run_until_disconnected()
 
         except Exception as e:
-            print(f"⚠️ [ERROR] Failed to start bot: {e}")
+            print(f"⚠️ [ОШИБКА] Не удалось запустить бота: {e}")
 
+
+    # Callback: Handle the '/start' command
     async def handle_start_command(self, event):
-        await self.show_language_selection(event)
+        await self.show_main_menu(event)
 
-    async def handle_language_command(self, event):
-        """Handle the /language command to change language"""
-        await self.show_language_selection(event)
 
-    async def show_language_selection(self, event):
-        """Show language selection menu"""
-        user_id = event.sender_id
-        current_lang = self.get_user_language(user_id)
-        
-        # Get current language name
-        current_lang_name = LANGUAGE_BUTTONS[current_lang]
-        
-        buttons = [
-            [Button.inline(text, f"lang:{lang}")] 
-            for lang, text in LANGUAGE_BUTTONS.items()
-        ]
-        
-        # Add a "Cancel" button if this is a language change (not initial selection)
-        if isinstance(event, events.NewMessage.Event):
-            buttons.append([Button.inline("❌ Cancel", "cancel_lang")])
-        
-        await event.respond(
-            f"🌍 Please select your language / Por favor, seleccione su idioma / Пожалуйста, выберите ваш язык:\n\n"
-            f"Current language / Idioma actual / Текущий язык: {current_lang_name}",
+    # Callback: Handle asset selection
+    async def handle_asset_selection(self, event):
+        selected_asset = event.data.decode('utf-8')
+
+        if selected_asset in ["otc", "regular_assets"]:
+            # Always show all pairs by default
+            await self.display_currency_pairs(event, selected_asset)
+        elif selected_asset.startswith("pair:"):
+            selected_pair = selected_asset.split(":")[1]
+            await self.prompt_for_time(event, selected_pair)
+
+
+    # Method: Display currency pairs
+    async def display_currency_pairs(self, event, asset_type):
+        pairs = await self.currency_pairs.fetch_pairs(asset_type)
+        buttons = self.generate_buttons(pairs, asset_type)
+
+        await event.edit(
+            f"🔮💹 *Пожалуйста, выберите валютную пару:* 💹🔮",
             buttons=buttons
         )
 
-    async def handle_language_selection(self, event):
-        """Handle language selection"""
-        if event.data.decode('utf-8') == "cancel_lang":
-            await event.answer("Language selection cancelled")
-            return
-            
-        lang = event.data.decode('utf-8').split(':')[1]
-        user_id = event.sender_id
-        self.user_languages[user_id] = lang
-        
-        # Get the language name for the confirmation message
-        lang_name = LANGUAGE_BUTTONS[lang]
-        
-        # Send confirmation message in the new language
-        await event.answer(f"Language changed to {lang_name}")
-        
-        # If this was triggered by /language command, show main menu
-        if isinstance(event, events.CallbackQuery.Event):
-            await self.show_main_menu(event)
-
-    async def delete_previous_messages(self, user_id):
-        """Delete previous messages for the user"""
-        try:
-            if user_id in self.last_message_ids:
-                print(f"Deleting {len(self.last_message_ids[user_id])} messages for user {user_id}")
-                for msg_id in self.last_message_ids[user_id]:
-                    try:
-                        await self.client.delete_messages(user_id, msg_id)
-                        print(f"Successfully deleted message {msg_id}")
-                    except Exception as e:
-                        print(f"Error deleting message {msg_id}: {e}")
-                self.last_message_ids[user_id] = []
-        except Exception as e:
-            print(f"Error in delete_previous_messages: {e}")
-
-    async def track_message(self, user_id, message):
-        """Track a new message for the user"""
-        try:
-            if user_id not in self.last_message_ids:
-                self.last_message_ids[user_id] = []
-            if message and hasattr(message, 'id'):
-                self.last_message_ids[user_id].append(message.id)
-                print(f"Tracking message {message.id} for user {user_id}")
-        except Exception as e:
-            print(f"Error tracking message: {e}")
-
-    async def handle_asset_selection(self, event):
-        user_id = event.sender_id
-        selected_asset = event.data.decode('utf-8')
-        
-        try:
-            # Delete previous messages when starting a new request
-            await self.delete_previous_messages(user_id)
-            
-            if selected_asset in ["otc", "regular_assets"]:
-                await self.display_currency_pairs(event, selected_asset)
-            elif selected_asset.startswith("pair:"):
-                selected_pair = selected_asset.split(":")[1]
-                await self.prompt_for_time(event, selected_pair)
-        except Exception as e:
-            print(f"Error in handle_asset_selection: {e}")
-            try:
-                await event.respond("Error processing selection. Please try again.")
-                await self.show_main_menu(event)
-            except:
-                pass
-
-    async def display_currency_pairs(self, event, asset_type):
-        user_id = event.sender_id
-        pairs = await self.currency_pairs.fetch_pairs(asset_type)
-        buttons = self.generate_buttons(pairs, asset_type, user_id)
-
-        try:
-            # Instead of editing, send a new message
-            menu_msg = await event.respond(
-                self.get_text(user_id, 'select_pair'),
-                buttons=buttons
-            )
-            await self.track_message(user_id, menu_msg)
-        except Exception as e:
-            print(f"Error displaying currency pairs: {e}")
-            # If there's an error, try to send a new message
-            try:
-                await event.respond("Error displaying pairs. Please try again.")
-                await self.show_main_menu(event)
-            except:
-                pass
-
+    # Callback: Prompt for time selection
     async def prompt_for_time(self, event, selected_pair):
         try:
-            user_id = event.sender_id
-            lang = self.get_user_language(user_id)
-            buttons = [
-                [Button.inline(LANGUAGES[lang]['buttons']['time_1'], b"1")],
-                [Button.inline(LANGUAGES[lang]['buttons']['time_3'], b"3")],
-                [Button.inline(LANGUAGES[lang]['buttons']['time_5'], b"5")],
-                [Button.inline(LANGUAGES[lang]['buttons']['time_15'], b"15")]
-            ]
-
-            # Instead of editing, send a new message
-            time_msg = await event.respond(
-                self.get_text(user_id, 'select_time', pair=selected_pair),
-                buttons=buttons
+            await event.respond(
+                f"💡 *Выберите подходящее время для начала магии!* 🔮\n\n✅ Вы выбрали: {selected_pair}\n\n⏳✨ *Укажите время истечения:* ✨⏳",
+                buttons=[
+                    [Button.inline("1️⃣ 1 минута 🕐", b"1")],
+                    [Button.inline("3️⃣ 3 минуты 🕒", b"3")],
+                    [Button.inline("5️⃣ 5 минут 🕔", b"5")],
+                    [Button.inline("1️⃣5️⃣ 15 минут 🕘", b"15")]
+                ]
             )
-            await self.track_message(user_id, time_msg)
 
+            # Define a closure for the callback
             async def handle_time_input(response):
                 if response.data.decode('utf-8') in ["1", "3", "5", "15"]:
+                    # Remove the handler immediately to avoid conflicts
                     self.client.remove_event_handler(handle_time_input, events.CallbackQuery)
                     await self._handle_time_input(response, selected_pair)
                 else:
-                    await response.answer(self.get_text(user_id, 'error_invalid_time'), alert=True)
+                    await response.answer("⚠️ Неверный выбор времени.", alert=True)
 
+            # Add the handler with specific data to scope its action
             self.client.add_event_handler(
                 handle_time_input,
                 events.CallbackQuery(func=lambda e: e.sender_id == event.sender_id)
             )
 
         except Exception as e:
-            print(f"⚠️ [ERROR] Error in prompt_for_time: {e}")
-            try:
-                await event.respond("Error selecting time. Please try again.")
-                await self.show_main_menu(event)
-            except:
-                pass
+            print(f"⚠️ [ОШИБКА] Ошибка при запросе времени: {e}")
 
+    # Helper method: Handle time input
     async def _handle_time_input(self, response, selected_pair):
         try:
             time_choice = int(response.data.decode('utf-8'))
-            print(f"✅ [INFO] Time selected: {time_choice} minutes for pair {selected_pair}")
+            print(f"✅ [ИНФО] Время выбрано: {time_choice} минут для пары {selected_pair}")
+
+            # Process the selection
             await self.process_selection(response, selected_pair, time_choice)
 
         except ValueError as ve:
-            print(f"⚠️ [ERROR] Invalid time input: {ve}")
+            print(f"⚠️ [ОШИБКА] Неверный ввод времени: {ve}")
         except Exception as e:
-            print(f"⚠️ [ERROR] Error in process selection: {e}")
+            print(f"⚠️ [ОШИБКА] Ошибка в процессе обработки выбора: {e}")
 
     async def process_selection(self, response, selected_pair, time_choice):
-        """Process the user's selection and generate signals"""
+        """
+        Обработать выбранную валютную пару и время истечения.
+        """
         try:
-            user_id = response.sender_id
-            # Delete previous messages when starting a new request
-            await self.delete_previous_messages(user_id)
-            
-            lang = self.get_user_language(user_id)
-            
-            # Clean up the pair name
+            # Update time mapping to match the `time_choice` values
+            time_mapping = {
+                1: "1 минута",
+                3: "3 минуты",
+                5: "5 минут",
+                15: "15 минут"
+            }
+
+            # Clean up the currency pair
             cleaned_pair = remove_country_flags(selected_pair)
             asset = "_".join(cleaned_pair.replace("/", "").split())
-            
+
+            # Replace "OTC" with "_otc" if present
             if asset.endswith("OTC"):
                 asset = asset[:-3] + "_otc"
-            
+
             period = time_choice
-            token = "cZoCQNWriz"
-            
-            processing_msg = await response.respond(
-                self.get_text(user_id, 'processing', 
-                            pair=selected_pair, 
-                            time=LANGUAGES[lang]['time_options'][time_choice])
+            token = "cZoCQNWriz"  # Using the working token
+
+            # Notify the user about the process
+            await response.respond(
+                f"⏳ Обработка запроса для {selected_pair} с временем истечения {time_mapping[time_choice]}...\n"
+                "Пожалуйста, подождите, пока мы получим результаты."
             )
-            await self.track_message(user_id, processing_msg)
-            
+
+            # Call fetch_summary with error handling
             results, history_data = await self.fetch_summary_with_handling(asset, period, token)
-            
+
             if results is None or history_data is None:
-                error_msg = await response.respond(self.get_text(user_id, 'error_no_data'))
-                await self.track_message(user_id, error_msg)
-                await self.show_main_menu(response)
+                await response.respond(
+                    "⚠️ Извините, не удалось получить данные для анализа. Пожалуйста, попробуйте другую пару или время."
+                )
                 return
-            
+
             if results and history_data:
-                self.summary = HistorySummary(history_data, time_choice)
-                signal_info = self.summary.generate_signal(lang=lang)
-                
-                chart_plotter = TradingChartPlotter(history_data, selected_pair, 
-                                                  LANGUAGES[lang]['time_options'][time_choice])
+                # Format results (optional)
+                # summary = format_summary(results['Summary'])
+                # indicators = format_indicators(results['Indicators'])
+                history_summary = HistorySummary(history_data, time_choice)
+                signal_info = history_summary.generate_signal(selected_pair, time_choice)
+
+                # Generate the chart
+                chart_plotter = TradingChartPlotter(history_data, selected_pair, time_mapping[time_choice])
                 chart_image = chart_plotter.plot_trading_chart()
-                
+
                 if chart_image:
+                    # Save the image as a temporary PNG file
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
                         temp_file_path = temp_file.name
-                        temp_file.write(chart_image.read())
-                    
-                    chart_msg = await self.client.send_file(
-                        user_id,
-                        temp_file_path,
-                        force_document=False
-                    )
-                    await self.track_message(user_id, chart_msg)
-                    os.remove(temp_file_path)
-                    
-                    signal_msg = await response.respond(signal_info)
-                    await self.track_message(user_id, signal_msg)
-                else:
-                    error_msg = await response.respond(self.get_text(user_id, 'error_chart'))
-                    await self.track_message(user_id, error_msg)
-                    
-                    success_msg = await response.respond(
-                        self.get_text(user_id, 'success',
-                                    pair=selected_pair,
-                                    time=LANGUAGES[lang]['time_options'][time_choice],
-                                    signal=signal_info)
-                    )
-                    await self.track_message(user_id, success_msg)
-                
-                # Show the menu after the signal response
-                menu_msg = await self.show_main_menu(response)
-                if menu_msg:
-                    await self.track_message(user_id, menu_msg)
-            else:
-                error_msg = await response.respond(
-                    self.get_text(user_id, 'error_results', pair=asset)
-                )
-                await self.track_message(user_id, error_msg)
-                menu_msg = await self.show_main_menu(response)
-                if menu_msg:
-                    await self.track_message(user_id, menu_msg)
-            
-        except Exception as e:
-            logger.error(f"Error in process_selection: {e}")
-            error_msg = await response.respond(self.get_text(user_id, 'error_results', pair=selected_pair))
-            await self.track_message(user_id, error_msg)
-            menu_msg = await self.show_main_menu(response)
-            if menu_msg:
-                await self.track_message(user_id, menu_msg)
+                        temp_file.write(chart_image.read())  # Write the BytesIO content to the temporary file
 
-    async def show_main_menu(self, event, message=None):
-        """Show the main menu with all available commands."""
-        try:
-            user_id = event.sender_id
-            lang = self.get_user_language(user_id)
-            
-            # Get the menu text in the user's language
-            menu_text = self.get_text(user_id, 'welcome')
-            
-            # Create buttons for OTC and Regular pairs
-            buttons = [
-                [Button.inline(LANGUAGES[lang]['buttons']['otc'], b'otc')],
-                [Button.inline(LANGUAGES[lang]['buttons']['regular'], b'regular')]
-            ]
-            
-            # If there's an existing message, edit it
-            if message:
-                await message.edit(menu_text, buttons=buttons)
-                return message
+                    # Send the chart image as a photo (inline image)
+                    await self.client.send_file(
+                        response.sender_id,
+                        temp_file_path,  # Sending the temporary PNG file
+                        
+                        force_document=False  # Tells Telethon to send it as a photo
+                    )
+                    await response.respond(
+                        f"{signal_info}"
+                    )
+
+                    # Clean up the temporary file after sending
+                    os.remove(temp_file_path)
+                else:
+                    await response.respond(
+                        "⚠️ Не удалось сгенерировать график, но ниже приведены резюме и индикаторы."
+                    )
+                    await response.respond(
+                        f"🎉 Вы выбрали {selected_pair} с временем истечения {time_mapping[time_choice]}!\n\n"
+                        f"{signal_info}"
+                    )
+
             else:
-                # Otherwise send a new message
-                menu_msg = await event.respond(menu_text, buttons=buttons)
-                return menu_msg
-                
+                await response.respond(
+                    f"⚠️ Не удалось получить результаты для {asset} с выбранным временем истечения."
+                )
+
         except Exception as e:
-            print(f"Error showing main menu: {e}")
-            # Try to send a basic message if the menu fails
-            try:
-                error_msg = await event.respond("Error showing menu. Please try /start")
-                return error_msg
-            except:
-                return None
+            print(f"⚠️ [ОШИБКА] Ошибка в процессе обработки выбора: {e}")
+        # Show the main menu after processing
+        await self.show_main_menu(response)
+   
+
+    async def show_main_menu(self, event):
+        print(f"📲 [ИНФО] Отображение главного меню для пользователя {event.sender_id}")
+        await event.respond(
+            "✨🔮 Добро пожаловать в бота \"Мистический трейдер\"! 🔮✨\n"
+            "🧙‍♂️ Здесь вы откроете для себя магию сигналов и таинственные знаки рынка. 📈📉\n\n"
+            "⚠️ *Важно:* Это не кнопка для легких денег! Помните о риск-менеджменте 💰 и дисциплине 📊.\n\n"
+            "💡 Давайте начнем! Выберите:\n"
+            "1️⃣ OTC-активы\n"
+            "2️⃣ Обычные валютные пары",
+            buttons=[
+                [Button.inline("1️⃣ OTC-активы 🔄 (доступны 24/7)", b"otc")],
+                [Button.inline("2️⃣ Обычные активы 🌐 (во время работы рынков)", b"regular_assets")]
+            ]
+        )
+
 
     async def fetch_summary_with_handling(self, asset, period, token):
         try:
-            print(f"🔄 [INFO] Fetching data for {asset} with period {period}")
+            print(f"🔄 [ИНФО] Fetching data for {asset} with period {period}")
             results, history_data = await fetch_summary(asset, period, token)
             
             if results is None or history_data is None:
-                print(f"⚠️ [ERROR] Failed to fetch data for {asset}")
+                print(f"⚠️ [ОШИБКА] Failed to fetch data for {asset}")
                 return None, None
             
             return results, history_data
         except Exception as e:
-            print(f"⚠️ [ERROR] Error in fetch_summary_with_handling: {str(e)}")
+            print(f"⚠️ [ОШИБКА] Ошибка в fetch_summary_with_handling: {str(e)}")
             return None, None
+
 
 if __name__ == "__main__":
     bot_client = TelegramBotClient()
     asyncio.run(bot_client.start_bot())
+
+
+
+# from telethon import TelegramClient, events, Button
+# import os
+# from dotenv import load_dotenv
+# import asyncio
+# from datetime import datetime
+# from CurrencyPairs import CurrencyPairs
+# from demo_test import fetch_summary
+# from Helpers import *
+
+# class TelegramBotClient:
+#     def __init__(self):
+#         print("🔄 [INFO] Loading environment variables from .env file.")
+#         load_dotenv()
+#         self.currency_pairs = CurrencyPairs()
+
+#         self.api_id = os.getenv('API_ID')
+#         self.api_hash = os.getenv('API_HASH')
+#         self.bot_token = os.getenv('BOT_TOKEN')
+
+#         if not all([self.api_id, self.api_hash, self.bot_token]):
+#             raise ValueError("Missing environment variables: API_ID, API_HASH, or BOT_TOKEN")
+
+#         self.client = None
+
+#     async def connect(self):
+#         try:
+#             print("🚀 [INFO] Initializing Telegram Client for the bot.")
+#             self.client = TelegramClient('bot', self.api_id, self.api_hash)
+#             await self.client.start(bot_token=self.bot_token)
+#             print("✅ [INFO] Successfully connected to Telegram.")
+#         except Exception as e:
+#             print(f"⚠️ [ERROR] Failed to connect: {e}")
+
+#     def generate_buttons(self, pairs, show_all, selected_asset):
+#         buttons = [
+#             [Button.inline(pair, f"pair:{pair}") for pair in pairs[i:i+2]]
+#             for i in range(0, len(pairs), 2)
+#         ]
+#         if show_all:
+#             buttons.append([Button.inline("See All", f"show_all:{selected_asset}")])
+#         else:
+#             buttons.append([Button.inline("See Less", f"show_less:{selected_asset}")])
+#         return buttons
+
+#     async def start_bot(self):
+#         try:
+#             await self.connect()
+
+#             @self.client.on(events.NewMessage(pattern='/start'))
+#             async def start_command(event):
+#                 await self.show_main_menu(event)
+
+#             @self.client.on(events.CallbackQuery)
+#             async def asset_selection(event):
+#                 selected_asset = event.data.decode('utf-8')
+
+#                 if selected_asset in ["otc", "regular_assets"]:
+#                     pairs = await self.currency_pairs.fetch_pairs(selected_asset)
+#                     visible_pairs = pairs[:6]
+#                     show_all = len(pairs) > 6
+
+#                     buttons = self.generate_buttons(visible_pairs, show_all, selected_asset)
+
+#                     await event.edit(
+#                         f"Here are the {selected_asset.replace('_', ' ').capitalize()} Currency Pairs:",
+#                         buttons=buttons
+#                     )
+#                 elif selected_asset.startswith("pair:"):
+#                     selected_pair = selected_asset.split(":")[1]
+#                     await self.prompt_for_time(event, selected_pair)
+#                 elif selected_asset.startswith("show_all:"):
+#                     asset_type = selected_asset.split(":")[1]
+#                     pairs = await self.currency_pairs.fetch_pairs(asset_type)
+#                     buttons = self.generate_buttons(pairs, False, asset_type)
+
+#                     await event.edit(
+#                         f"Here are all the {asset_type.replace('_', ' ').capitalize()} Currency Pairs:",
+#                         buttons=buttons
+#                     )
+#                 elif selected_asset.startswith("show_less:"):
+#                     asset_type = selected_asset.split(":")[1]
+#                     pairs = await self.currency_pairs.fetch_pairs(asset_type)
+#                     visible_pairs = pairs[:6]
+#                     buttons = self.generate_buttons(visible_pairs, True, asset_type)
+
+#                     await event.edit(
+#                         f"Here are the {asset_type.replace('_', ' ').capitalize()} Currency Pairs:",
+#                         buttons=buttons
+#                     )
+#                 else:
+#                     await event.respond("⚠️ Invalid option selected.")
+
+#             await self.client.run_until_disconnected()
+
+#         except Exception as e:
+#             print(f"⚠️ [ERROR] Failed to start bot: {e}")
+
+#     async def prompt_for_time(self, event, selected_pair):
+#         try:
+#             await event.respond(
+#                 f"✅ You selected: {selected_pair}\n\n⏳ Select expiration time:\n1️⃣ 1 minute\n2️⃣ 3 minutes\n3️⃣ 5 minutes\n4️⃣ 15 minutes"
+#             )
+
+#             @self.client.on(events.NewMessage(from_users=event.sender_id))
+#             async def handle_time_input(response):
+#                 try:
+#                     time_choice = int(response.text)
+#                     if time_choice not in [1, 2, 3, 4]:
+#                         raise ValueError
+
+#                     self.client.remove_event_handler(handle_time_input)
+
+#                     # Pass selected pair and time to a separate function
+#                     await self.process_selection(response, selected_pair, time_choice)
+
+#                 except ValueError:
+#                     await response.respond("❌ Invalid input. Please enter a number between 1 and 4.")
+#                 except Exception as e:
+#                     print(f"⚠️ [ERROR] Error in handle_time_input: {e}")
+
+#         except Exception as e:
+#             print(f"⚠️ [ERROR] Error in prompting for time: {e}")
+
+#     async def process_selection(self, response, selected_pair, time_choice):
+#         """
+#         Process the selected currency pair and expiration time.
+#         """
+#         try:
+#             time_mapping = {
+#                 1: "1 minute",
+#                 2: "3 minutes",
+#                 3: "5 minutes",
+#                 4: "15 minutes"
+#             }
+
+#             # Clean the currency pair (remove emojis, '/', spaces, and replace with '_')
+#             cleaned_pair = remove_country_flags(selected_pair)
+#             asset = "_".join(cleaned_pair.replace("/", "").split())
+
+#             # Replace trailing "OTC" with "_otc" if it exists
+#             if asset.endswith("OTC"):
+#                 asset = asset[:-3] + "_otc"  # Remove "OTC" and append "_otc"
+
+#             period = time_choice  # Use the selected time directly as period
+#             token = "cZoCQNWriz"  # Replace with the actual token
+
+#             # Inform the user that their request is being processed
+#             await response.respond(
+#                 f"⏳ Processing your request for {selected_pair} with an expiration time of {time_mapping[time_choice]}...\n"
+#                 "Please wait while we fetch the results."
+#             )
+
+#             # Call fetch_summary with proper async handling
+#             results = await self.fetch_summary_with_handling(asset, period, token)
+
+#             # Respond with the final selection and results
+#             if results:
+#                 summary = format_summary(results['Summary'])
+#                 indicators = format_indicators(results['Indicators'])
+
+#                 await response.respond(
+#                     f"🎉 You chose {selected_pair} with an expiration time of {time_mapping[time_choice]}!\n\n"
+#                     f"{summary}\n\n{indicators}"
+#                 )
+#             else:
+#                 await response.respond(
+#                     f"⚠️ No results were returned for {asset} with the selected time."
+#                 )
+
+#         except Exception as e:
+#             print(f"⚠️ [ERROR] Error in process_selection: {e}")
+#         # Show main menu after processing
+#         await self.show_main_menu(response)
+
+#     async def show_main_menu(self, event):
+#         print(f"📲 [INFO] Showing main menu to user {event.sender_id}")
+#         await event.respond(
+#             "🎉 Welcome to the Pocket Option Trading Bot!\n\n💹 Let's start by selecting the type of assets.",
+#             buttons=[
+#                 [Button.inline("🔹 OTC", b"otc")],
+#                 [Button.inline("🔹 Regular Assets", b"regular_assets")]
+#             ]
+#         )
+#     async def fetch_summary_with_handling(self, asset, period, token):
+#         """
+#         Wrapper for fetch_summary to ensure proper handling for websockets.
+#         """
+#         try:
+#             results = await fetch_summary(asset, period, token)
+
+#             # Add logic to validate the results or reattempt fetching if needed
+#             if results:
+#                 return results
+#             else:
+#                 print("⚠️ [WARNING] No results fetched. Reattempting may be required.")
+#                 return None
+
+#         except Exception as e:
+#             print(f"⚠️ [ERROR] Error in fetch_summary_with_handling: {e}")
+#             return None
+
+# if __name__ == "__main__":
+#     bot_client = TelegramBotClient()
+#     asyncio.run(bot_client.start_bot())
 
