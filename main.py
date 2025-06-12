@@ -26,6 +26,7 @@ class TelegramBotClient:
         load_dotenv()
         self.currency_pairs = CurrencyPairs()
         self.user_languages = {}  # Store user language preferences
+        self.last_message_ids = {}  # Store last message IDs for each user
 
         self.api_id = "26422824"
         self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
@@ -131,25 +132,73 @@ class TelegramBotClient:
         if isinstance(event, events.CallbackQuery.Event):
             await self.show_main_menu(event)
 
-    async def handle_asset_selection(self, event):
-        selected_asset = event.data.decode('utf-8')
-        user_id = event.sender_id
+    async def delete_previous_messages(self, user_id):
+        """Delete previous messages for the user"""
+        try:
+            if user_id in self.last_message_ids:
+                print(f"Deleting {len(self.last_message_ids[user_id])} messages for user {user_id}")
+                for msg_id in self.last_message_ids[user_id]:
+                    try:
+                        await self.client.delete_messages(user_id, msg_id)
+                        print(f"Successfully deleted message {msg_id}")
+                    except Exception as e:
+                        print(f"Error deleting message {msg_id}: {e}")
+                self.last_message_ids[user_id] = []
+        except Exception as e:
+            print(f"Error in delete_previous_messages: {e}")
 
-        if selected_asset in ["otc", "regular_assets"]:
-            await self.display_currency_pairs(event, selected_asset)
-        elif selected_asset.startswith("pair:"):
-            selected_pair = selected_asset.split(":")[1]
-            await self.prompt_for_time(event, selected_pair)
+    async def track_message(self, user_id, message):
+        """Track a new message for the user"""
+        try:
+            if user_id not in self.last_message_ids:
+                self.last_message_ids[user_id] = []
+            if message and hasattr(message, 'id'):
+                self.last_message_ids[user_id].append(message.id)
+                print(f"Tracking message {message.id} for user {user_id}")
+        except Exception as e:
+            print(f"Error tracking message: {e}")
+
+    async def handle_asset_selection(self, event):
+        user_id = event.sender_id
+        selected_asset = event.data.decode('utf-8')
+        
+        try:
+            # Delete previous messages when starting a new request
+            await self.delete_previous_messages(user_id)
+            
+            if selected_asset in ["otc", "regular_assets"]:
+                await self.display_currency_pairs(event, selected_asset)
+            elif selected_asset.startswith("pair:"):
+                selected_pair = selected_asset.split(":")[1]
+                await self.prompt_for_time(event, selected_pair)
+        except Exception as e:
+            print(f"Error in handle_asset_selection: {e}")
+            try:
+                await event.respond("Error processing selection. Please try again.")
+                await self.show_main_menu(event)
+            except:
+                pass
 
     async def display_currency_pairs(self, event, asset_type):
         user_id = event.sender_id
         pairs = await self.currency_pairs.fetch_pairs(asset_type)
         buttons = self.generate_buttons(pairs, asset_type, user_id)
 
-        await event.edit(
-            self.get_text(user_id, 'select_pair'),
-            buttons=buttons
-        )
+        try:
+            # Instead of editing, send a new message
+            menu_msg = await event.respond(
+                self.get_text(user_id, 'select_pair'),
+                buttons=buttons
+            )
+            await self.track_message(user_id, menu_msg)
+        except Exception as e:
+            print(f"Error displaying currency pairs: {e}")
+            # If there's an error, try to send a new message
+            try:
+                await event.respond("Error displaying pairs. Please try again.")
+                await self.show_main_menu(event)
+            except:
+                pass
 
     async def prompt_for_time(self, event, selected_pair):
         try:
@@ -162,10 +211,12 @@ class TelegramBotClient:
                 [Button.inline(LANGUAGES[lang]['buttons']['time_15'], b"15")]
             ]
 
-            await event.respond(
+            # Instead of editing, send a new message
+            time_msg = await event.respond(
                 self.get_text(user_id, 'select_time', pair=selected_pair),
                 buttons=buttons
             )
+            await self.track_message(user_id, time_msg)
 
             async def handle_time_input(response):
                 if response.data.decode('utf-8') in ["1", "3", "5", "15"]:
@@ -181,6 +232,11 @@ class TelegramBotClient:
 
         except Exception as e:
             print(f"⚠️ [ERROR] Error in prompt_for_time: {e}")
+            try:
+                await event.respond("Error selecting time. Please try again.")
+                await self.show_main_menu(event)
+            except:
+                pass
 
     async def _handle_time_input(self, response, selected_pair):
         try:
@@ -197,6 +253,9 @@ class TelegramBotClient:
         """Process the user's selection and generate signals"""
         try:
             user_id = response.sender_id
+            # Delete previous messages when starting a new request
+            await self.delete_previous_messages(user_id)
+            
             lang = self.get_user_language(user_id)
             
             # Clean up the pair name
@@ -209,16 +268,18 @@ class TelegramBotClient:
             period = time_choice
             token = "cZoCQNWriz"
             
-            await response.respond(
+            processing_msg = await response.respond(
                 self.get_text(user_id, 'processing', 
                             pair=selected_pair, 
                             time=LANGUAGES[lang]['time_options'][time_choice])
             )
+            await self.track_message(user_id, processing_msg)
             
             results, history_data = await self.fetch_summary_with_handling(asset, period, token)
             
             if results is None or history_data is None:
-                await response.respond(self.get_text(user_id, 'error_no_data'))
+                error_msg = await response.respond(self.get_text(user_id, 'error_no_data'))
+                await self.track_message(user_id, error_msg)
                 await self.show_main_menu(response)
                 return
             
@@ -235,34 +296,48 @@ class TelegramBotClient:
                         temp_file_path = temp_file.name
                         temp_file.write(chart_image.read())
                     
-                    await self.client.send_file(
+                    chart_msg = await self.client.send_file(
                         user_id,
                         temp_file_path,
                         force_document=False
                     )
-                    await response.respond(signal_info)
+                    await self.track_message(user_id, chart_msg)
                     os.remove(temp_file_path)
+                    
+                    signal_msg = await response.respond(signal_info)
+                    await self.track_message(user_id, signal_msg)
                 else:
-                    await response.respond(self.get_text(user_id, 'error_chart'))
-                    await response.respond(
+                    error_msg = await response.respond(self.get_text(user_id, 'error_chart'))
+                    await self.track_message(user_id, error_msg)
+                    
+                    success_msg = await response.respond(
                         self.get_text(user_id, 'success',
                                     pair=selected_pair,
                                     time=LANGUAGES[lang]['time_options'][time_choice],
                                     signal=signal_info)
                     )
+                    await self.track_message(user_id, success_msg)
                 
                 # Show the menu after the signal response
-                await self.show_main_menu(response)
+                menu_msg = await self.show_main_menu(response)
+                if menu_msg:
+                    await self.track_message(user_id, menu_msg)
             else:
-                await response.respond(
+                error_msg = await response.respond(
                     self.get_text(user_id, 'error_results', pair=asset)
                 )
-                await self.show_main_menu(response)
+                await self.track_message(user_id, error_msg)
+                menu_msg = await self.show_main_menu(response)
+                if menu_msg:
+                    await self.track_message(user_id, menu_msg)
             
         except Exception as e:
             logger.error(f"Error in process_selection: {e}")
-            await response.respond(self.get_text(user_id, 'error_results', pair=selected_pair))
-            await self.show_main_menu(response)
+            error_msg = await response.respond(self.get_text(user_id, 'error_results', pair=selected_pair))
+            await self.track_message(user_id, error_msg)
+            menu_msg = await self.show_main_menu(response)
+            if menu_msg:
+                await self.track_message(user_id, menu_msg)
 
     async def show_main_menu(self, event, message=None):
         """Show the main menu with all available commands."""
@@ -282,17 +357,20 @@ class TelegramBotClient:
             # If there's an existing message, edit it
             if message:
                 await message.edit(menu_text, buttons=buttons)
+                return message
             else:
                 # Otherwise send a new message
-                await event.respond(menu_text, buttons=buttons)
+                menu_msg = await event.respond(menu_text, buttons=buttons)
+                return menu_msg
                 
         except Exception as e:
             print(f"Error showing main menu: {e}")
             # Try to send a basic message if the menu fails
             try:
-                await event.respond("Error showing menu. Please try /start")
+                error_msg = await event.respond("Error showing menu. Please try /start")
+                return error_msg
             except:
-                pass
+                return None
 
     async def fetch_summary_with_handling(self, asset, period, token):
         try:
