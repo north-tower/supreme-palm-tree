@@ -1,15 +1,19 @@
 version: '3.8'
 services:
-  telegram-bot:
+  bot:
     build: .
-    container_name: telegram-bot
-    restart: unless-stopped
-    environment:
-      - ENV=production
-      - TZ=UTC
+    container_name: mystic-trader-bot
     volumes:
-      - ./logs:/app/logs  # Optional: persist logs
       - ./data:/app/data
+      - ./bot.log:/app/bot.log
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('https://api.telegram.org')"]
       interval: 30s
