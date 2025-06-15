@@ -1,17 +1,27 @@
 version: '3.8'
 services:
-  bot:
+  telegram-bot:
     build: .
-    container_name: mystic_trader_bot
+    container_name: telegram-bot
     restart: unless-stopped
-    volumes:
-      - ./data:/app/data
     environment:
+      - ENV=production
       - TZ=UTC
+    volumes:
+      - ./logs:/app/logs  # Optional: persist logs
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('https://api.telegram.org')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
     deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
     # Add any environment variables your bot needs
