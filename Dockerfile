@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -11,8 +11,14 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create data directory with proper permissions
+RUN mkdir -p /app/data && chmod 777 /app/data
+
 # Copy the rest of the application
 COPY . .
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
 
 # Create a non-root user
 RUN useradd -m -u 1000 appuser

@@ -45,9 +45,16 @@ class UserManager:
 
     def _ensure_data_directory(self):
         """Ensure the data directory exists"""
-        os.makedirs('data', exist_ok=True)
-        if not os.path.exists(self.users_file):
-            self._save_users({})
+        try:
+            os.makedirs('data', exist_ok=True)
+            if not os.path.exists(self.users_file):
+                self._save_users({})
+        except Exception as e:
+            print(f"⚠️ [ERROR] Failed to create data directory: {e}")
+            # Try to create in current directory if data directory fails
+            self.users_file = 'users.json'
+            if not os.path.exists(self.users_file):
+                self._save_users({})
 
     def _load_users(self):
         """Load users from the JSON file"""
@@ -59,7 +66,12 @@ class UserManager:
                     user_id for user_id, user in self.users.items()
                     if user.get('is_admin', False)
                 }
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"⚠️ [WARNING] Failed to load users file: {e}")
+            self.users = {}
+            self.admin_ids = set()
+        except Exception as e:
+            print(f"⚠️ [ERROR] Unexpected error loading users: {e}")
             self.users = {}
             self.admin_ids = set()
 
@@ -67,8 +79,18 @@ class UserManager:
         """Save users to the JSON file"""
         if users is None:
             users = self.users
-        with open(self.users_file, 'w') as f:
-            json.dump(users, f, indent=4)
+        try:
+            with open(self.users_file, 'w') as f:
+                json.dump(users, f, indent=4)
+        except Exception as e:
+            print(f"⚠️ [ERROR] Failed to save users: {e}")
+            # Try to save in current directory if data directory fails
+            try:
+                self.users_file = 'users.json'
+                with open(self.users_file, 'w') as f:
+                    json.dump(users, f, indent=4)
+            except Exception as e2:
+                print(f"⚠️ [ERROR] Failed to save users in fallback location: {e2}")
 
     def add_admin(self, admin_id):
         """Add a new admin"""

@@ -1,21 +1,16 @@
 version: '3.8'
+
 services:
-  telegram-bot:
+  bot:
     build: .
     container_name: telegram-bot
-    restart: unless-stopped
-    environment:
-      - ENV=production
-      - TZ=UTC
     volumes:
-      - ./logs:/app/logs  # Optional: persist logs
       - ./data:/app/data
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('https://api.telegram.org')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
+    environment:
+      - API_ID=${API_ID}
+      - API_HASH=${API_HASH}
+      - BOT_TOKEN=${BOT_TOKEN}
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -23,5 +18,5 @@ services:
           memory: 512M
         reservations:
           cpus: '0.25'
-          memory: 128M
+          memory: 256M
     # Add any environment variables your bot needs
