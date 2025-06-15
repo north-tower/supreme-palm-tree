@@ -34,15 +34,16 @@ ENV/
 *.swp
 *.swo
 
-# Logs and data
-logs/
-data/
-*.log
-
 # Docker
 Dockerfile
 docker-compose.yml
 .dockerignore
+
+# Data (will be mounted as volume)
+data/
+
+# Logs
+*.log
 
 # Other
 .DS_Store
