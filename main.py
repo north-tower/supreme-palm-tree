@@ -12,19 +12,6 @@ import tempfile
 from language_manager import LanguageManager
 from user_manager import UserManager
 import json
-import logging
-import sys
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot.log')
-    ]
-)
-logger = logging.getLogger(__name__)
 
 # Initialize managers
 lang_manager = LanguageManager()
@@ -32,7 +19,6 @@ user_manager = UserManager()
 
 class TelegramBotClient:
     def __init__(self):
-        logger.info("🔄 Initializing Telegram Bot Client")
         print("🔄 [INFO] Loading environment variables from .env file.")
         load_dotenv()
         self.currency_pairs = CurrencyPairs()
@@ -45,43 +31,21 @@ class TelegramBotClient:
         
         # Initialize with default admin
         self.default_admin_id = "1885741502"  # Replace with your Telegram ID
-        logger.info(f"Setting up default admin with ID: {self.default_admin_id}")
         user_manager.add_admin(self.default_admin_id)
 
         if not all([self.api_id, self.api_hash, self.bot_token]):
-            error_msg = "Missing environment variables: API_ID, API_HASH, or BOT_TOKEN"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise ValueError("Missing environment variables: API_ID, API_HASH, or BOT_TOKEN")
 
         self.client = None
-        logger.info("✅ Bot client initialized successfully")
 
     async def connect(self):
         try:
-            logger.info("🚀 Attempting to connect to Telegram")
             print("🚀 [INFO] Initializing Telegram Client for the bot.")
             self.client = TelegramClient('bot', self.api_id, self.api_hash)
-            
-            # Test connection to Telegram API
-            logger.info("Testing connection to Telegram API...")
-            try:
-                await self.client.connect()
-                if await self.client.is_user_authorized():
-                    logger.info("✅ Successfully connected to Telegram API")
-                else:
-                    logger.info("Starting bot with token...")
             await self.client.start(bot_token=self.bot_token)
-            except Exception as e:
-                logger.error(f"Failed to connect to Telegram API: {e}")
-                raise
-
-            logger.info("✅ Successfully connected to Telegram.")
             print("✅ [INFO] Successfully connected to Telegram.")
         except Exception as e:
-            error_msg = f"⚠️ [ERROR] Failed to connect: {e}"
-            logger.error(error_msg)
-            print(error_msg)
-            raise
+            print(f"⚠️ [ERROR] Failed to connect: {e}")
 
     def generate_buttons(self, pairs, selected_asset):
         buttons = [
@@ -113,11 +77,9 @@ class TelegramBotClient:
 
     async def start_bot(self):
         try:
-            logger.info("Starting bot...")
             await self.connect()
 
             # Add command handlers
-            logger.info("Registering command handlers...")
             self.client.add_event_handler(self.handle_start_command, events.NewMessage(pattern='/start'))
             self.client.add_event_handler(self.handle_help_command, events.NewMessage(pattern='/help'))
             self.client.add_event_handler(
@@ -125,16 +87,11 @@ class TelegramBotClient:
                 events.NewMessage(pattern='/approve|/pending|/stats|/addadmin|/removeadmin|/listadmins')
             )
             self.client.add_event_handler(self.handle_asset_selection, events.CallbackQuery)
-            logger.info("✅ Command handlers registered successfully")
 
-            logger.info("Bot is ready to receive messages")
             await self.client.run_until_disconnected()
 
         except Exception as e:
-            error_msg = f"⚠️ [ERROR] Failed to start bot: {e}"
-            logger.error(error_msg)
-            print(error_msg)
-            raise
+            print(f"⚠️ [ERROR] Failed to start bot: {e}")
 
     async def handle_start_command(self, event):
         user_id = event.sender_id
@@ -216,10 +173,10 @@ class TelegramBotClient:
             elif selected_asset in ["otc", "regular_assets"]:
                 if self.user_request_count[user_id] > 1:
                     await self.delete_user_messages(user_id)
-            await self.display_currency_pairs(event, selected_asset)
-        elif selected_asset.startswith("pair:"):
-            selected_pair = selected_asset.split(":")[1]
-            await self.prompt_for_time(event, selected_pair)
+                await self.display_currency_pairs(event, selected_asset)
+            elif selected_asset.startswith("pair:"):
+                selected_pair = selected_asset.split(":")[1]
+                await self.prompt_for_time(event, selected_pair)
             elif selected_asset.startswith("lang:"):
                 new_language = selected_asset.split(":")[1]
                 if lang_manager.set_language(new_language):
@@ -346,7 +303,7 @@ class TelegramBotClient:
                         force_document=False
                     )
                     await self.store_message(response.sender_id, chart_msg)
-
+                    
                     signal_msg = await response.respond(signal_response)
                     await self.store_message(response.sender_id, signal_msg)
 
@@ -372,7 +329,7 @@ class TelegramBotClient:
             
         # Show the main menu after processing
         await self.show_main_menu(response)
-   
+
     async def show_language_selection(self, event):
         available_languages = {
             "en": "🇬🇧 English",
@@ -395,11 +352,11 @@ class TelegramBotClient:
         try:
             print(f"🔄 [INFO] Fetching data for {asset} with period {period}")
             results, history_data = await fetch_summary(asset, period, token)
-
+            
             if results is None or history_data is None:
                 print(f"⚠️ [WARNING] Failed to fetch data for {asset}")
                 return None, None
-
+            
             return results, history_data
         except Exception as e:
             print(f"⚠️ [ERROR] Error in fetch_summary_with_handling: {str(e)}")
@@ -636,11 +593,6 @@ class TelegramBotClient:
             await self.show_main_menu(event)
 
 if __name__ == "__main__":
-    try:
-        logger.info("Starting bot application...")
-        bot_client = TelegramBotClient()
-        asyncio.run(bot_client.start_bot())
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
-        sys.exit(1)
+    bot_client = TelegramBotClient()
+    asyncio.run(bot_client.start_bot())
 
