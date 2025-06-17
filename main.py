@@ -111,13 +111,17 @@ class TelegramBotClient:
         # Add user if new
         if user_manager.add_user(user_id, username):
             user = user_manager.get_user(user_id)
-            if user['is_approved']:
+            if user['is_admin']:
+                welcome_msg = lang_manager.get_text("welcome_admin")  # Use admin-specific welcome message
+            elif user['is_approved']:
                 welcome_msg = lang_manager.get_text("welcome_approved")
             else:
                 welcome_msg = lang_manager.get_text("welcome_pending")
         else:
             user = user_manager.get_user(user_id)
-            if user['is_approved']:
+            if user['is_admin']:
+                welcome_msg = lang_manager.get_text("welcome_admin")  # Use admin-specific welcome message
+            elif user['is_approved']:
                 welcome_msg = lang_manager.get_text("welcome_approved")
             else:
                 welcome_msg = lang_manager.get_text("welcome_trial")
@@ -132,7 +136,7 @@ class TelegramBotClient:
         user = user_manager.get_user(user_id)
         
         if user:
-            if not user['is_approved']:
+            if not user['is_approved'] and not user['is_admin']:  # Only show for non-approved, non-admin users
                 signals_msg = lang_manager.get_text("trial_signals_remaining").format(count=user['signals_remaining'])
             else:
                 signals_msg = ""

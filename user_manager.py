@@ -155,12 +155,20 @@ class UserManager:
         if not user:
             return False
         # Check if user is active and has remaining signals
+        if user['is_admin']:
+            return user['is_active']  # Admins can always use signals if active
         return user['is_active'] and user['signals_remaining'] > 0
 
     def use_signal(self, user_id):
         """Use one signal from user's remaining signals"""
         user = self.get_user(user_id)
-        if user and user['is_active'] and user['signals_remaining'] > 0:
+        if not user or not user['is_active']:
+            return False
+        # Don't decrement signals for admins
+        if user['is_admin']:
+            return True
+        # For non-admins, check and decrement signals
+        if user['signals_remaining'] > 0:
             user['signals_remaining'] -= 1
             self._save_users()
             return True
@@ -177,7 +185,11 @@ class UserManager:
         
         user['is_approved'] = True
         user['is_active'] = True
-        user['signals_remaining'] = float('inf')  # Unlimited signals for approved users
+        # Set signals based on user type
+        if user.get('is_admin', False):
+            user['signals_remaining'] = float('inf')  # Unlimited signals for admins
+        else:
+            user['signals_remaining'] = 100  # 100 signals for regular approved users
         self._save_users()
         return True, "User approved successfully"
 
