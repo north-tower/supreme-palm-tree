@@ -969,27 +969,29 @@ Please describe your issue below:
         # Build help message
         help_message = [
             lang_manager.get_text("help_title"),
-            "\n",
+            "\n\n",  # Add extra spacing after title
             lang_manager.get_text("help_general"),
-            "\n",
-            lang_manager.get_text("help_trading")
+            "\n\n",  # Add extra spacing between sections
+            lang_manager.get_text("help_trading"),
+            "\n\n",  # Add extra spacing between sections
+            lang_manager.get_text("help_support")
         ]
         
         # Add admin commands if user is admin
         if is_admin:
             help_message.extend([
-                "\n",
+                "\n\n",  # Add extra spacing before admin section
                 lang_manager.get_text("help_admin")
             ])
         
         # Add footer
         help_message.extend([
-            "\n",
+            "\n\n",  # Add extra spacing before footer
             lang_manager.get_text("help_footer")
         ])
         
         # Send the help message
-        await event.respond("".join(help_message))
+        await event.respond("".join(help_message), parse_mode='markdown')
 
     async def prompt_for_time(self, event, selected_pair):
         try:
