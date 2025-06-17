@@ -11,11 +11,13 @@ from Analysis import HistorySummary
 import tempfile
 from language_manager import LanguageManager
 from user_manager import UserManager
+from support_manager import SupportManager
 import json
 
 # Initialize managers
 lang_manager = LanguageManager()
 user_manager = UserManager()
+support_manager = SupportManager()
 
 class TelegramBotClient:
     def __init__(self):
@@ -24,6 +26,7 @@ class TelegramBotClient:
         self.currency_pairs = CurrencyPairs()
         self.user_messages = {}
         self.user_request_count = {}
+        self.user_states = {}  # Store user states for support system
 
         self.api_id = "26422824"
         self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
@@ -82,12 +85,20 @@ class TelegramBotClient:
             # Add command handlers
             self.client.add_event_handler(self.handle_start_command, events.NewMessage(pattern='/start'))
             self.client.add_event_handler(self.handle_help_command, events.NewMessage(pattern='/help'))
+            self.client.add_event_handler(self.handle_support_command, events.NewMessage(pattern='/support'))
             self.client.add_event_handler(
                 self.handle_admin_command, 
-                events.NewMessage(pattern='/approve|/pending|/stats|/addadmin|/removeadmin|/listadmins')
+                events.NewMessage(pattern='/approve|/pending|/stats|/addadmin|/removeadmin|/listadmins|/tickets|/debug')
             )
             self.client.add_event_handler(self.handle_asset_selection, events.CallbackQuery)
+            self.client.add_event_handler(
+                self.handle_support_callback,
+                events.CallbackQuery(pattern='^support:')
+            )
+            # Add handler for regular messages
+            self.client.add_event_handler(self.handle_message, events.NewMessage)
 
+            print("✅ [INFO] All event handlers registered successfully")
             await self.client.run_until_disconnected()
 
         except Exception as e:
@@ -303,7 +314,7 @@ class TelegramBotClient:
                         force_document=False
                     )
                     await self.store_message(response.sender_id, chart_msg)
-                    
+
                     signal_msg = await response.respond(signal_response)
                     await self.store_message(response.sender_id, signal_msg)
 
@@ -329,7 +340,7 @@ class TelegramBotClient:
             
         # Show the main menu after processing
         await self.show_main_menu(response)
-
+   
     async def show_language_selection(self, event):
         available_languages = {
             "en": "🇬🇧 English",
@@ -352,31 +363,491 @@ class TelegramBotClient:
         try:
             print(f"🔄 [INFO] Fetching data for {asset} with period {period}")
             results, history_data = await fetch_summary(asset, period, token)
-            
+
             if results is None or history_data is None:
                 print(f"⚠️ [WARNING] Failed to fetch data for {asset}")
                 return None, None
-            
+
             return results, history_data
         except Exception as e:
             print(f"⚠️ [ERROR] Error in fetch_summary_with_handling: {str(e)}")
             return None, None
 
+    async def handle_support_command(self, event):
+        """Handle the support command"""
+        try:
+            user_id = event.sender_id
+            print(f"🔍 [SUPPORT] User {user_id} initiated support command")
+            await self.show_support_menu(event)
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in handle_support_command: {e}")
+
+    async def show_support_menu(self, event):
+        """Show the support menu"""
+        try:
+            print(f"🔍 [SUPPORT] Showing support menu for user {event.sender_id}")
+            # Improved header and instructions
+            header = (
+                """
+💬 *Support System*
+━━━━━━━━━━━━━━━━━━━━━━
+
+Please select an option below to get help or manage your tickets:
+"""
+            )
+            buttons = [
+                [Button.inline("📝 Create New Support Ticket", b"support:new")],
+                [Button.inline("📋 My Support Tickets", b"support:list")]
+            ]
+            message = await event.respond(
+                header,
+                buttons=buttons,
+                parse_mode='markdown'
+            )
+            await self.store_message(event.sender_id, message)
+            print(f"✅ [SUPPORT] Support menu shown successfully")
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in show_support_menu: {e}")
+
+    async def handle_support_callback(self, event):
+        """Handle support system callbacks"""
+        try:
+            user_id = event.sender_id
+            data = event.data.decode('utf-8')
+            print(f"🔍 [SUPPORT] Received callback: {data} from user {user_id}")
+            
+            # Ensure we have the full callback data
+            if ':' not in data:
+                print(f"⚠️ [SUPPORT] Invalid callback data format: {data}")
+                return
+
+            parts = data.split(':')
+            if len(parts) < 2:
+                print(f"⚠️ [SUPPORT] Invalid callback format: {data}")
+                return
+
+            action = parts[1]
+            print(f"🔍 [SUPPORT] Processing action: {action}")
+
+            if action == "new":
+                print(f"🔍 [SUPPORT] Creating new ticket for user {user_id}")
+                # Get the username from the event sender
+                username = event.sender.username
+                if not username:
+                    # If username is not set, try to get first_name and last_name
+                    first_name = getattr(event.sender, 'first_name', '')
+                    last_name = getattr(event.sender, 'last_name', '')
+                    username = f"{first_name} {last_name}".strip() or f"User_{user_id}"
+                print(f"🔍 [SUPPORT] User username: {username}")
+                
+                # Create ticket with username
+                ticket_id = support_manager.create_ticket(user_id, username)
+                print(f"✅ [SUPPORT] Created ticket {ticket_id} for user {username}")
+                
+                self.user_states[user_id] = {'state': 'waiting_message', 'ticket_id': ticket_id}
+                # Improved ticket creation confirmation message
+                confirmation_message = (
+                    f"""
+✅ *Your support ticket has been created!*
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎫 *Ticket ID:* `{ticket_id}`
+
+Please describe your issue below:
+"""
+                )
+                await event.edit(confirmation_message, parse_mode='markdown')
+
+            elif action == "list":
+                print(f"🔍 [SUPPORT] Listing tickets for user {user_id}")
+                tickets = support_manager.get_user_tickets(user_id)
+                print(f"📋 [SUPPORT] Found {len(tickets)} tickets")
+                
+                if not tickets:
+                    print(f"ℹ️ [SUPPORT] No tickets found for user {user_id}")
+                    await event.edit(lang_manager.get_text("support_no_tickets"))
+                    return
+
+                # Create header
+                header = (
+                    "📋 *Support Tickets*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                )
+
+                # Format each ticket
+                ticket_list = []
+                for ticket_id, ticket in tickets.items():
+                    status = lang_manager.get_text(f"support_status_{ticket['status']}")
+                    username = ticket.get('username', 'Unknown')
+                    created_date = ticket['created_at'].split('T')[0]
+                    created_time = ticket['created_at'].split('T')[1][:5]
+                    
+                    ticket_list.append(
+                        f"🎫 *Ticket #{ticket_id}*\n"
+                        f"👤 From: {username}\n"
+                        f"🆔 ID: {ticket['user_id']}\n"
+                        f"📊 Status: {status}\n"
+                        f"📅 Created: {created_date} {created_time}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    )
+
+                # Create footer
+                footer = "\nClick on a ticket to view its details."
+
+                # Combine all parts
+                full_message = header + "\n".join(ticket_list) + footer
+
+                # Create buttons
+                buttons = []
+                for ticket_id in tickets:
+                    buttons.append([Button.inline(f"📋 View #{ticket_id}", f"support:view:{ticket_id}")])
+                buttons.append([Button.inline("❌ Cancel", b"support:cancel")])
+
+                print(f"✅ [SUPPORT] Displaying ticket list with {len(buttons)-1} tickets")
+                await event.edit(
+                    full_message,
+                    buttons=buttons,
+                    parse_mode='markdown'
+                )
+
+            elif action == "cancel":
+                print(f"🔍 [SUPPORT] Cancelling operation for user {user_id}")
+                self.user_states.pop(user_id, None)
+                await self.show_support_menu(event)
+
+            elif action == "view":
+                try:
+                    print(f"🔍 [SUPPORT] Starting view action")
+                    if len(parts) < 3:
+                        print(f"⚠️ [SUPPORT] Missing ticket ID in view action")
+                        await event.edit("Invalid ticket ID. Please try again.")
+                        return
+                        
+                    ticket_id = parts[2]
+                    print(f"🔍 [SUPPORT] Viewing ticket {ticket_id} for user {user_id}")
+                    
+                    # Get ticket data
+                    ticket = support_manager.get_ticket(ticket_id)
+                    if not ticket:
+                        print(f"⚠️ [SUPPORT] Ticket {ticket_id} not found")
+                        await event.edit("Ticket not found. Please try again.")
+                        return
+
+                    print(f"✅ [SUPPORT] Found ticket {ticket_id}")
+                    print(f"📝 [SUPPORT] Raw ticket data: {json.dumps(ticket, indent=2)}")
+                    
+                    # Build the message parts
+                    header = (
+                        f"🎫 *Ticket #{ticket_id}*\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"👤 From: {ticket.get('username', 'Unknown')}\n"
+                        f"🆔 User ID: {ticket['user_id']}\n"
+                        f"📊 Status: {ticket.get('status', 'unknown').upper()}\n"
+                        f"📅 Created: {ticket['created_at'].split('T')[0]} {ticket['created_at'].split('T')[1][:5]}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    )
+                    
+                    # Add messages
+                    messages_text = "💬 *Messages:*\n"
+                    if ticket.get('messages'):
+                        print(f"📝 [SUPPORT] Found {len(ticket['messages'])} messages")
+                        for msg in ticket['messages']:
+                            print(f"📝 [SUPPORT] Processing message: {json.dumps(msg, indent=2)}")
+                            sender = "👨‍💼 Support" if msg.get('is_admin', False) else "👤 You"
+                            timestamp = msg.get('timestamp', '').split('T')[1][:5]
+                            message = msg.get('message', '')
+                            messages_text += (
+                                f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                                f"{sender} • {timestamp}\n"
+                                f"{message}\n"
+                            )
+                    else:
+                        print(f"ℹ️ [SUPPORT] No messages found")
+                        messages_text += "No messages yet.\n"
+
+                    # Combine all parts
+                    full_message = header + messages_text
+                    print(f"📝 [SUPPORT] Final message to send:\n{full_message}")
+
+                    # Create buttons with emojis
+                    buttons = [
+                        [Button.inline("💬 Reply", f"support:reply:{ticket_id}")],
+                        [Button.inline("⬅️ Back to List", b"support:list")]
+                    ]
+                    
+                    if ticket.get('status') == 'open':
+                        buttons.append([Button.inline("🔒 Close Ticket", f"support:close:{ticket_id}")])
+                    else:
+                        buttons.append([Button.inline("🔓 Reopen Ticket", f"support:reopen:{ticket_id}")])
+
+                    print(f"📝 [SUPPORT] Created buttons: {buttons}")
+
+                    # Try to send the message
+                    try:
+                        print(f"✅ [SUPPORT] Attempting to edit message")
+                        await event.edit(full_message, buttons=buttons, parse_mode='markdown')
+                        print(f"✅ [SUPPORT] Successfully edited message")
+                    except Exception as e:
+                        print(f"⚠️ [ERROR] Failed to edit message: {str(e)}")
+                        try:
+                            print(f"✅ [SUPPORT] Attempting to send as new message")
+                            await event.respond(full_message, buttons=buttons, parse_mode='markdown')
+                            print(f"✅ [SUPPORT] Successfully sent new message")
+                        except Exception as e2:
+                            print(f"⚠️ [ERROR] Failed to send new message: {str(e2)}")
+                            # Try one last time with minimal formatting
+                            try:
+                                minimal_message = (
+                                    f"🎫 Ticket #{ticket_id}\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"👤 From: {ticket.get('username', 'Unknown')}\n"
+                                    f"📊 Status: {ticket.get('status', 'unknown').upper()}\n\n"
+                                    f"💬 Messages:\n"
+                                )
+                                if ticket.get('messages'):
+                                    for msg in ticket['messages']:
+                                        sender = "👨‍💼 Support" if msg.get('is_admin', False) else "👤 You"
+                                        minimal_message += f"{sender}: {msg.get('message', '')}\n"
+                                else:
+                                    minimal_message += "No messages yet.\n"
+                                
+                                print(f"📝 [SUPPORT] Sending minimal message:\n{minimal_message}")
+                                await event.respond(minimal_message, buttons=buttons)
+                                print(f"✅ [SUPPORT] Successfully sent minimal message")
+                            except Exception as e3:
+                                print(f"⚠️ [ERROR] All message sending attempts failed: {str(e3)}")
+                                await event.respond("Error viewing ticket. Please try again.")
+
+                except Exception as e:
+                    print(f"⚠️ [ERROR] Error in view ticket: {str(e)}")
+                    print(f"📝 [DEBUG] Full error details: {str(e)}")
+                    await event.respond("An error occurred. Please try again.")
+
+            elif action == "reply":
+                try:
+                    print(f"🔍 [SUPPORT] Starting reply action")
+                    if len(parts) < 3:
+                        print(f"⚠️ [SUPPORT] Missing ticket ID in reply action")
+                        await event.edit("Invalid ticket ID. Please try again.")
+                        return
+                        
+                    ticket_id = parts[2]
+                    print(f"🔍 [SUPPORT] Preparing reply for ticket {ticket_id}")
+                    self.user_states[user_id] = {'state': 'replying', 'ticket_id': ticket_id}
+                    await event.edit(lang_manager.get_text("support_enter_message"))
+                except Exception as e:
+                    print(f"⚠️ [ERROR] Error in reply action: {str(e)}")
+                    await event.respond("An error occurred. Please try again.")
+
+            elif action == "close":
+                try:
+                    print(f"🔍 [SUPPORT] Starting close action")
+                    if len(parts) < 3:
+                        print(f"⚠️ [SUPPORT] Missing ticket ID in close action")
+                        await event.edit("Invalid ticket ID. Please try again.")
+                        return
+                        
+                    ticket_id = parts[2]
+                    print(f"🔍 [SUPPORT] Closing ticket {ticket_id}")
+                    if support_manager.close_ticket(ticket_id):
+                        print(f"✅ [SUPPORT] Closed ticket {ticket_id}")
+                        await event.edit(lang_manager.get_text("support_ticket_closed").format(ticket_id=ticket_id))
+                    else:
+                        print(f"⚠️ [SUPPORT] Failed to close ticket {ticket_id}")
+                        await event.edit(lang_manager.get_text("support_ticket_not_found"))
+                except Exception as e:
+                    print(f"⚠️ [ERROR] Error in close action: {str(e)}")
+                    await event.respond("An error occurred. Please try again.")
+
+            elif action == "reopen":
+                try:
+                    print(f"🔍 [SUPPORT] Starting reopen action")
+                    if len(parts) < 3:
+                        print(f"⚠️ [SUPPORT] Missing ticket ID in reopen action")
+                        await event.edit("Invalid ticket ID. Please try again.")
+                        return
+                        
+                    ticket_id = parts[2]
+                    print(f"🔍 [SUPPORT] Reopening ticket {ticket_id}")
+                    if support_manager.reopen_ticket(ticket_id):
+                        print(f"✅ [SUPPORT] Reopened ticket {ticket_id}")
+                        await event.edit(lang_manager.get_text("support_ticket_reopened").format(ticket_id=ticket_id))
+                    else:
+                        print(f"⚠️ [SUPPORT] Failed to reopen ticket {ticket_id}")
+                        await event.edit(lang_manager.get_text("support_ticket_not_found"))
+                except Exception as e:
+                    print(f"⚠️ [ERROR] Error in reopen action: {str(e)}")
+                    await event.respond("An error occurred. Please try again.")
+
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in handle_support_callback: {str(e)}")
+            print(f"📝 [DEBUG] Full error details: {str(e)}")
+            try:
+                await event.respond("An error occurred while processing your request. Please try again.")
+            except Exception as response_error:
+                print(f"⚠️ [ERROR] Failed to send error response: {response_error}")
+
+    async def handle_message(self, event):
+        """Handle regular messages for support system"""
+        try:
+            user_id = event.sender_id
+            print(f"🔍 [SUPPORT] Received message from user {user_id}")
+            
+            if user_id in self.user_states:
+                state = self.user_states[user_id]
+                print(f"🔍 [SUPPORT] User state: {state}")
+                
+                if state['state'] in ['waiting_message', 'replying']:
+                    ticket_id = state['ticket_id']
+                    message = event.text
+                    print(f"🔍 [SUPPORT] Processing message for ticket {ticket_id}")
+                    
+                    # Add message to ticket
+                    is_admin = user_manager.is_admin(user_id)
+                    if support_manager.add_message(ticket_id, user_id, message, is_admin):
+                        print(f"✅ [SUPPORT] Added message to ticket {ticket_id}")
+                        # Notify the other party
+                        ticket = support_manager.get_ticket(ticket_id)
+                        if is_admin:
+                            print(f"🔍 [SUPPORT] Sending admin reply notification")
+                            try:
+                                # Convert user_id to integer
+                                target_user_id = int(ticket['user_id'])
+                                await self.client.send_message(
+                                    target_user_id,
+                                    f"""
+💬 *Support Reply*
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎫 *Ticket ID:* `{ticket_id}`
+📊 *Status:* Open
+
+👨‍💼 *Support Team:*
+{message}
+
+💡 You can reply to this message to continue the conversation.
+"""
+                                )
+                                print(f"✅ [SUPPORT] Sent notification to user {target_user_id}")
+                            except Exception as notify_error:
+                                print(f"⚠️ [ERROR] Failed to send user notification: {notify_error}")
+                        else:
+                            print(f"🔍 [SUPPORT] Sending user reply notification to admins")
+                            try:
+                                for admin_id in user_manager.get_admins():
+                                    try:
+                                        # Convert admin_id to integer
+                                        target_admin_id = int(admin_id)
+                                        await self.client.send_message(
+                                            target_admin_id,
+                                            f"""
+💬 *Support Reply*
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎫 *Ticket ID:* `{ticket_id}`
+📊 *Status:* Open
+
+👨‍💼 *Support Team:*
+{message}
+
+💡 You can reply to this message to continue the conversation.
+"""
+                                        )
+                                        print(f"✅ [SUPPORT] Sent notification to admin {target_admin_id}")
+                                    except Exception as admin_notify_error:
+                                        print(f"⚠️ [ERROR] Failed to send notification to admin {admin_id}: {admin_notify_error}")
+                            except Exception as admin_list_error:
+                                print(f"⚠️ [ERROR] Failed to get admin list: {admin_list_error}")
+                        
+                        # If this was the first message (ticket creation), show success message
+                        if state['state'] == 'waiting_message':
+                            print(f"✅ [SUPPORT] Showing ticket creation success message")
+                            await event.respond(lang_manager.get_text("support_ticket_created_success").format(ticket_id=ticket_id))
+                        else:
+                            print(f"✅ [SUPPORT] Showing message sent confirmation")
+                            await event.respond(lang_manager.get_text("support_ticket_sent"))
+                        
+                        self.user_states.pop(user_id)
+                    else:
+                        print(f"⚠️ [SUPPORT] Failed to add message to ticket {ticket_id}")
+                        await event.respond(lang_manager.get_text("support_ticket_not_found"))
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in handle_message: {e}")
+            print(f"📝 [DEBUG] Full error details: {str(e)}")
+            try:
+                await event.respond("An error occurred while processing your message. Please try again.")
+            except Exception as response_error:
+                print(f"⚠️ [ERROR] Failed to send error response: {response_error}")
+
     async def handle_admin_command(self, event):
         """Handle admin commands"""
         user_id = event.sender_id
-        print(f"🔍 [DEBUG] Processing admin command from user {user_id}")
-        
         if not user_manager.is_admin(user_id):
-            print(f"⚠️ [DEBUG] User {user_id} is not an admin")
             await event.respond(lang_manager.get_text("admin_only"))
             return
 
         command = event.text.split()[0][1:]  # Remove the / from the command
         args = event.text.split()[1:]
-        print(f"🔍 [DEBUG] Processing command: {command} with args: {args}")
 
-        if command == "approve":
+        if command == "debug":
+            if not args:
+                await event.respond("Usage: /debug <ticket_id>")
+                return
+            try:
+                ticket_id = args[0]
+                ticket = support_manager.get_ticket(ticket_id)
+                if ticket:
+                    await event.respond(f"Debug info for ticket {ticket_id}:\n```\n{json.dumps(ticket, indent=2)}\n```")
+                else:
+                    await event.respond(f"Ticket {ticket_id} not found")
+            except Exception as e:
+                await event.respond(f"Error: {str(e)}")
+
+        elif command == "tickets":
+            tickets = support_manager.get_open_tickets()
+            if not tickets:
+                await event.respond(lang_manager.get_text("no_pending_users"))
+                return
+
+            # Create header
+            header = (
+                "📋 *Support Tickets*\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            )
+
+            # Format each ticket
+            ticket_list = []
+            for ticket_id, ticket in tickets.items():
+                status = lang_manager.get_text(f"support_status_{ticket['status']}")
+                username = ticket.get('username', 'Unknown')
+                created_date = ticket['created_at'].split('T')[0]
+                created_time = ticket['created_at'].split('T')[1][:5]
+                
+                ticket_list.append(
+                    f"🎫 *Ticket #{ticket_id}*\n"
+                    f"👤 From: {username}\n"
+                    f"🆔 ID: {ticket['user_id']}\n"
+                    f"📊 Status: {status}\n"
+                    f"📅 Created: {created_date} {created_time}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                )
+
+            # Create buttons
+            buttons = []
+            for ticket_id in tickets:
+                buttons.append([Button.inline(f"📋 View #{ticket_id}", f"support:view:{ticket_id}")])
+            buttons.append([Button.inline("❌ Cancel", b"support:cancel")])
+
+            # Combine all parts
+            full_message = header + "\n".join(ticket_list)
+
+            await event.respond(
+                full_message,
+                buttons=buttons,
+                parse_mode='markdown'
+            )
+
+        elif command == "approve":
             if not args:
                 await event.respond("Usage: /approve <user_id>")
                 return

@@ -22,5 +22,21 @@
         "signals_remaining": Infinity,
         "joined_date": "2025-06-15T13:47:33.340374",
         "is_active": true
+    },
+    "5295571920": {
+        "username": "AnonymusFibo",
+        "is_admin": false,
+        "is_approved": false,
+        "is_active": true,
+        "signals_remaining": 1,
+        "joined_date": "2025-06-17T16:09:17.208621"
+    },
+    "7761961558": {
+        "username": null,
+        "is_admin": false,
+        "is_approved": false,
+        "is_active": true,
+        "signals_remaining": 3,
+        "joined_date": "2025-06-17T18:16:37.111058"
     }
 }

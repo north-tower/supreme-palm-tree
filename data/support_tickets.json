@@ -1,0 +1,186 @@
+{
+    "85a8a0db": {
+        "user_id": "1885741502",
+        "username": null,
+        "status": "open",
+        "created_at": "2025-06-17T15:59:00.248665",
+        "updated_at": "2025-06-17T18:09:37.152947",
+        "messages": [
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Shshsh",
+                "timestamp": "2025-06-17T18:09:37.152928"
+            }
+        ]
+    },
+    "89d7d5ed": {
+        "user_id": "1885741502",
+        "username": null,
+        "status": "open",
+        "created_at": "2025-06-17T16:04:09.289999",
+        "updated_at": "2025-06-17T16:04:09.290012",
+        "messages": []
+    },
+    "d4db3e4a": {
+        "user_id": "1885741502",
+        "username": null,
+        "status": "open",
+        "created_at": "2025-06-17T16:29:40.719616",
+        "updated_at": "2025-06-17T17:47:20.129888",
+        "messages": [
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Hddbbdb",
+                "timestamp": "2025-06-17T16:29:43.387988"
+            },
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Babs",
+                "timestamp": "2025-06-17T17:47:20.129876"
+            }
+        ]
+    },
+    "d3785440": {
+        "user_id": "1885741502",
+        "username": null,
+        "status": "open",
+        "created_at": "2025-06-17T16:31:15.859714",
+        "updated_at": "2025-06-17T16:31:18.856472",
+        "messages": [
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Shhshs",
+                "timestamp": "2025-06-17T16:31:18.856457"
+            }
+        ]
+    },
+    "a6ea89de": {
+        "user_id": "1885741502",
+        "username": null,
+        "status": "open",
+        "created_at": "2025-06-17T16:51:34.799183",
+        "updated_at": "2025-06-17T16:51:36.867171",
+        "messages": [
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Bsbs",
+                "timestamp": "2025-06-17T16:51:36.867153"
+            }
+        ]
+    },
+    "ba39a7f8": {
+        "user_id": "1885741502",
+        "username": null,
+        "status": "closed",
+        "created_at": "2025-06-17T16:57:42.404650",
+        "updated_at": "2025-06-17T17:31:44.512258",
+        "messages": [
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Dbdhdh",
+                "timestamp": "2025-06-17T16:57:44.235246"
+            },
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Dhhdhsh",
+                "timestamp": "2025-06-17T17:31:14.334267"
+            }
+        ]
+    },
+    "dd12ad27": {
+        "user_id": "1885741502",
+        "username": "Miki .",
+        "status": "open",
+        "created_at": "2025-06-17T17:56:23.837941",
+        "updated_at": "2025-06-17T17:56:35.216658",
+        "messages": [
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Vvc",
+                "timestamp": "2025-06-17T17:56:35.216649"
+            }
+        ]
+    },
+    "ba737ae0": {
+        "user_id": "1885741502",
+        "username": "Miki .",
+        "status": "open",
+        "created_at": "2025-06-17T17:58:53.934760",
+        "updated_at": "2025-06-17T17:58:57.858870",
+        "messages": [
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Dhsh",
+                "timestamp": "2025-06-17T17:58:57.858822"
+            }
+        ]
+    },
+    "13ff5c2d": {
+        "user_id": "1885741502",
+        "username": "Miki .",
+        "status": "open",
+        "created_at": "2025-06-17T18:06:44.701592",
+        "updated_at": "2025-06-17T18:06:47.270251",
+        "messages": [
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Sghs",
+                "timestamp": "2025-06-17T18:06:47.270233"
+            }
+        ]
+    },
+    "eb638d73": {
+        "user_id": "7761961558",
+        "username": "Flo Rah",
+        "status": "open",
+        "created_at": "2025-06-17T18:17:15.182995",
+        "updated_at": "2025-06-17T18:18:08.951767",
+        "messages": [
+            {
+                "user_id": "7761961558",
+                "is_admin": false,
+                "message": "Hello",
+                "timestamp": "2025-06-17T18:17:20.590433"
+            },
+            {
+                "user_id": "1885741502",
+                "is_admin": true,
+                "message": "Hey",
+                "timestamp": "2025-06-17T18:18:08.951750"
+            }
+        ]
+    },
+    "d6da1cef": {
+        "user_id": "1885741502",
+        "username": "Miki .",
+        "status": "open",
+        "created_at": "2025-06-17T18:23:17.132033",
+        "updated_at": "2025-06-17T18:23:17.132050",
+        "messages": []
+    },
+    "f0601497": {
+        "user_id": "7761961558",
+        "username": "Flo Rah",
+        "status": "closed",
+        "created_at": "2025-06-17T18:40:08.755892",
+        "updated_at": "2025-06-17T18:40:55.775482",
+        "messages": [
+            {
+                "user_id": "7761961558",
+                "is_admin": false,
+                "message": "/support",
+                "timestamp": "2025-06-17T18:40:18.609561"
+            }
+        ]
+    }
+}
