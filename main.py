@@ -55,6 +55,8 @@ class TelegramBotClient:
             [Button.inline(pair, f"pair:{pair}") for pair in pairs[i:i+2]]
             for i in range(0, len(pairs), 2)
         ]
+        # Add the Analyze All button at the end
+        buttons.append([Button.inline("🔎 Analyze All", f"analyze_all:{selected_asset}")])
         return buttons  # Removed the 'show_all' and 'show_less' logic
 
     async def delete_user_messages(self, user_id):
@@ -197,6 +199,9 @@ class TelegramBotClient:
                 if lang_manager.set_language(new_language):
                     await event.respond(lang_manager.get_text("language_changed"))
                 await self.show_main_menu(event)
+            elif selected_asset.startswith("analyze_all:"):
+                asset_type = selected_asset.split(":")[1]
+                await self.handle_global_analysis(event, asset_type)
         except Exception as e:
             print(f"⚠️ [ERROR] Error in handle_asset_selection: {e}")
             try:
@@ -1068,6 +1073,85 @@ Please describe your issue below:
             print(f"⚠️ [ERROR] Error in display_currency_pairs: {e}")
             # Try to show main menu as fallback
             await self.show_main_menu(event)
+
+    async def handle_global_analysis(self, event, asset_type):
+        import asyncio
+        try:
+            # Show a processing message
+            processing_msg = await event.respond("🔎 Analyzing all pairs across all timeframes. Please wait...")
+            await self.store_message(event.sender_id, processing_msg)
+
+            pairs = await self.currency_pairs.fetch_pairs(asset_type)
+            aligned_pairs = []
+            timeframes = [1, 3, 5, 15]
+            token = "cZoCQNWriz"  # Use your working token
+
+            total_pairs = len(pairs)
+            progress_update_every = 5
+
+            async def analyze_pair(pair):
+                cleaned_pair = remove_country_flags(pair)
+                asset = "_".join(cleaned_pair.replace("/", "").split())
+                if asset.endswith("OTC"):
+                    asset = asset[:-3] + "_otc"
+                signals = []
+                for period in timeframes:
+                    results, history_data = await self.fetch_summary_with_handling(asset, period, token)
+                    direction = None
+                    if results and history_data:
+                        history_summary = HistorySummary(history_data, period)
+                        signal_info = history_summary.generate_signal(pair, period)
+                        # Extract direction (BUY/SELL/NO_SIGNAL) from signal_info
+                        if isinstance(signal_info, str):
+                            import re
+                            if re.search(r'ПРОДАТЬ', signal_info) or re.search(r'SELL', signal_info, re.IGNORECASE):
+                                direction = "SELL"
+                            elif re.search(r'КУПИТЬ', signal_info) or re.search(r'BUY', signal_info, re.IGNORECASE):
+                                direction = "BUY"
+                            else:
+                                direction = "NO_SIGNAL"
+                        elif isinstance(signal_info, dict):
+                            if 'direction' in signal_info:
+                                direction = signal_info['direction']
+                                if direction not in ["BUY", "SELL"]:
+                                    direction = "NO_SIGNAL"
+                            else:
+                                direction = "NO_SIGNAL"
+                        else:
+                            direction = "NO_SIGNAL"
+                    else:
+                        direction = "NO_SIGNAL"
+                    signals.append(direction)
+                # Check if all signals are the same and not NO_SIGNAL
+                if len(set(signals)) == 1 and signals[0] in ["BUY", "SELL"]:
+                    return (pair, signals[0])
+                return None
+
+            results = []
+            for i in range(0, total_pairs, progress_update_every):
+                batch = pairs[i:i+progress_update_every]
+                batch_results = await asyncio.gather(*(analyze_pair(pair) for pair in batch))
+                results.extend(batch_results)
+                # Update progress message
+                progress_text = f"🔎 Analyzing all pairs... {min(i+progress_update_every, total_pairs)}/{total_pairs} checked."
+                try:
+                    await processing_msg.edit(progress_text)
+                except Exception:
+                    pass
+
+            aligned_pairs = [r for r in results if r]
+
+            # Prepare the result message
+            if aligned_pairs:
+                msg = "\n".join([f"• {pair}: {direction}" for pair, direction in aligned_pairs])
+                result_msg = f"✅ Strongly aligned pairs across all timeframes:\n\n{msg}"
+            else:
+                result_msg = "No strongly aligned pairs found at this time."
+
+            await processing_msg.edit(result_msg)
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in handle_global_analysis: {e}")
+            await event.respond("An error occurred during global analysis. Please try again later.")
 
 if __name__ == "__main__":
     bot_client = TelegramBotClient()
