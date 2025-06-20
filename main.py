@@ -57,6 +57,8 @@ class TelegramBotClient:
         ]
         # Add the Analyze All button at the end
         buttons.append([Button.inline("🔎 Analyze All", f"analyze_all:{selected_asset}")])
+        # Add the Find Best Opportunity button
+        buttons.append([Button.inline("🌟 Find Best Opportunity", f"best_opportunity:{selected_asset}")])
         return buttons  # Removed the 'show_all' and 'show_less' logic
 
     async def delete_user_messages(self, user_id):
@@ -202,6 +204,9 @@ class TelegramBotClient:
             elif selected_asset.startswith("analyze_all:"):
                 asset_type = selected_asset.split(":")[1]
                 await self.handle_global_analysis(event, asset_type)
+            elif selected_asset.startswith("best_opportunity:"):
+                asset_type = selected_asset.split(":")[1]
+                await self.handle_best_opportunity(event, asset_type)
         except Exception as e:
             print(f"⚠️ [ERROR] Error in handle_asset_selection: {e}")
             try:
@@ -1077,26 +1082,34 @@ Please describe your issue below:
     async def handle_global_analysis(self, event, asset_type):
         import asyncio
         try:
-            # Show a processing message
-            processing_msg = await event.respond("🔎 Analyzing all pairs across all timeframes. Please wait...")
+            # Show initial processing message
+            processing_msg = await event.respond("🔎 **Starting Global Analysis**\n━━━━━━━━━━━━━━━━━━━━━━\n\n📊 Analyzing all pairs across all timeframes...\n⏳ This may take a few moments.")
             await self.store_message(event.sender_id, processing_msg)
 
             pairs = await self.currency_pairs.fetch_pairs(asset_type)
-            aligned_pairs = []
             timeframes = [1, 3, 5, 15]
             token = "cZoCQNWriz"  # Use your working token
 
             total_pairs = len(pairs)
-            progress_update_every = 5
+            progress_update_every = 3  # Update more frequently
+
+            # Dictionary to store results by timeframe
+            timeframe_results = {1: [], 3: [], 5: [], 15: []}
 
             async def analyze_pair(pair):
                 cleaned_pair = remove_country_flags(pair)
                 asset = "_".join(cleaned_pair.replace("/", "").split())
                 if asset.endswith("OTC"):
                     asset = asset[:-3] + "_otc"
-                signals = []
-                for period in timeframes:
-                    results, history_data = await self.fetch_summary_with_handling(asset, period, token)
+                
+                pair_results = {}
+                
+                # Fetch data for all timeframes in parallel
+                tasks = [self.fetch_summary_with_handling(asset, period, token) for period in timeframes]
+                timeframe_data = await asyncio.gather(*tasks)
+
+                for i, period in enumerate(timeframes):
+                    results, history_data = timeframe_data[i]
                     direction = None
                     if results and history_data:
                         history_summary = HistorySummary(history_data, period)
@@ -1121,37 +1134,210 @@ Please describe your issue below:
                             direction = "NO_SIGNAL"
                     else:
                         direction = "NO_SIGNAL"
-                    signals.append(direction)
-                # Check if all signals are the same and not NO_SIGNAL
-                if len(set(signals)) == 1 and signals[0] in ["BUY", "SELL"]:
-                    return (pair, signals[0])
-                return None
+                    
+                    # Only store BUY or SELL signals (not NO_SIGNAL)
+                    if direction in ["BUY", "SELL"]:
+                        pair_results[period] = direction
+                
+                return pair, pair_results
 
             results = []
             for i in range(0, total_pairs, progress_update_every):
                 batch = pairs[i:i+progress_update_every]
+                
+                # Show current batch being analyzed
+                current_batch_text = ", ".join([remove_country_flags(pair) for pair in batch])
+                progress_text = (
+                    f"🔎 **Global Analysis in Progress**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📊 **Progress:** {min(i+progress_update_every, total_pairs)}/{total_pairs} pairs\n"
+                    f"📈 **Analyzing:** {current_batch_text}\n"
+                    f"⏳ **Timeframes:** 1m, 3m, 5m, 15m\n\n"
+                    f"🔄 Processing..."
+                )
+                try:
+                    await processing_msg.edit(progress_text, parse_mode='markdown')
+                except Exception:
+                    pass
+                
                 batch_results = await asyncio.gather(*(analyze_pair(pair) for pair in batch))
                 results.extend(batch_results)
-                # Update progress message
-                progress_text = f"🔎 Analyzing all pairs... {min(i+progress_update_every, total_pairs)}/{total_pairs} checked."
+
+            # Show completion message
+            completion_text = (
+                f"✅ **Analysis Complete!**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"📊 **Analyzed:** {total_pairs} pairs\n"
+                f"⏰ **Timeframes:** 1m, 3m, 5m, 15m\n"
+                f"🔄 **Processing results...**"
+            )
+            try:
+                await processing_msg.edit(completion_text, parse_mode='markdown')
+            except Exception:
+                pass
+
+            # Categorize results by timeframe
+            for pair, pair_results in results:
+                for timeframe, direction in pair_results.items():
+                    timeframe_results[timeframe].append((pair, direction))
+
+            # Count total signals found
+            total_signals = sum(len(pairs) for pairs in timeframe_results.values())
+
+            # Prepare the result message
+            result_msg = f"🔎 **Global Analysis Results**\n━━━━━━━━━━━━━━━━━━━━━━\n\n📊 **Summary:** Found {total_signals} signals across {total_pairs} pairs\n\n"
+            
+            for timeframe in timeframes:
+                pairs_for_timeframe = timeframe_results[timeframe]
+                if pairs_for_timeframe:
+                    result_msg += f"⏰ **{timeframe}-Minute Timeframe:** ({len(pairs_for_timeframe)} signals)\n"
+                    for pair, direction in pairs_for_timeframe:
+                        emoji = "🟢" if direction == "BUY" else "🔴"
+                        result_msg += f"{emoji} {pair}: {direction}\n"
+                    result_msg += "\n"
+                else:
+                    result_msg += f"⏰ **{timeframe}-Minute Timeframe:** (0 signals)\n"
+                    result_msg += "No strong signals found.\n\n"
+
+            if total_signals == 0:
+                result_msg += "💡 **Tip:** Try analyzing a different asset type or check back later for new opportunities."
+
+            await processing_msg.edit(result_msg, parse_mode='markdown')
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in handle_global_analysis: {e}")
+            await event.respond("An error occurred during global analysis. Please try again later.")
+
+    async def handle_best_opportunity(self, event, asset_type):
+        import asyncio
+        try:
+            # Friendly initial message
+            processing_msg = await event.respond(
+                "🌟 **Finding the Best Opportunity**\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "The bot is scanning all pairs and timeframes for the strongest signal.\n"
+                "This may take a few moments. Please wait... 🕵️‍♂️✨"
+            )
+            await self.store_message(event.sender_id, processing_msg)
+
+            pairs = await self.currency_pairs.fetch_pairs(asset_type)
+            timeframes = [1, 3, 5, 15]
+            token = "cZoCQNWriz"
+
+            best_score = -1
+            best_result = None
+            total_pairs = len(pairs)
+            checked = 0
+            all_opportunities = []
+
+            async def analyze_pair_timeframe(pair, period):
+                cleaned_pair = remove_country_flags(pair)
+                asset = "_".join(cleaned_pair.replace("/", "").split())
+                if asset.endswith("OTC"):
+                    asset = asset[:-3] + "_otc"
+                results, history_data = await self.fetch_summary_with_handling(asset, period, token)
+                if results and history_data:
+                    indicators = results.get("Indicators", {})
+                    rsi = indicators.get("RSI")
+                    # Use RSI distance from 50 as a proxy for confidence
+                    if isinstance(rsi, (int, float)):
+                        score = abs(rsi - 50)
+                    else:
+                        score = 0
+                    # Only consider strong BUY/SELL signals
+                    history_summary = HistorySummary(history_data, period)
+                    signal_info = history_summary.generate_signal(pair, period)
+                    direction = None
+                    if isinstance(signal_info, str):
+                        import re
+                        if re.search(r'ПРОДАТЬ', signal_info) or re.search(r'SELL', signal_info, re.IGNORECASE):
+                            direction = "SELL"
+                        elif re.search(r'КУПИТЬ', signal_info) or re.search(r'BUY', signal_info, re.IGNORECASE):
+                            direction = "BUY"
+                        else:
+                            direction = None
+                    elif isinstance(signal_info, dict):
+                        direction = signal_info.get('direction')
+                        if direction not in ["BUY", "SELL"]:
+                            direction = None
+                    if direction:
+                        return (score, pair, period, direction, rsi)
+                return None
+
+            # Analyze all pairs and timeframes in parallel batches
+            batch_size = 3
+            results = []
+            total_tasks = total_pairs * len(timeframes)
+            completed_tasks = 0
+            for i in range(0, total_pairs, batch_size):
+                batch = pairs[i:i+batch_size]
+                tasks = []
+                for pair in batch:
+                    for period in timeframes:
+                        tasks.append(analyze_pair_timeframe(pair, period))
+                batch_results = await asyncio.gather(*tasks)
+                results.extend(batch_results)
+                completed_tasks += len(tasks)
+                # Progress update with animated dots
+                dots = "." * ((completed_tasks // batch_size) % 4)
+                progress_text = (
+                    f"🌟 **Finding the Best Opportunity**\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🔎 Checked: {completed_tasks}/{total_tasks} opportunities {dots}\n"
+                    f"⏳ Still working, please wait..."
+                )
                 try:
                     await processing_msg.edit(progress_text)
                 except Exception:
                     pass
 
-            aligned_pairs = [r for r in results if r]
+            # Show completion message
+            try:
+                await processing_msg.edit(
+                    "✅ **Scan Complete!**\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "Processing results..."
+                )
+            except Exception:
+                pass
 
-            # Prepare the result message
-            if aligned_pairs:
-                msg = "\n".join([f"• {pair}: {direction}" for pair, direction in aligned_pairs])
-                result_msg = f"✅ Strongly aligned pairs across all timeframes:\n\n{msg}"
+            # Collect all valid opportunities
+            all_opportunities = [r for r in results if r]
+            all_opportunities.sort(reverse=True, key=lambda x: x[0])
+
+            # Find the best result
+            best_result = all_opportunities[0] if all_opportunities else None
+
+            # Prepare top 3 summary
+            top3 = all_opportunities[:3]
+            summary = ""
+            if top3:
+                summary += "\n**Top 3 Opportunities:**\n"
+                for idx, (score, pair, period, direction, rsi) in enumerate(top3, 1):
+                    emoji = "🟢" if direction == "BUY" else "🔴"
+                    summary += (
+                        f"{idx}. {emoji} {pair} | {period}m | {direction} | RSI: {rsi if rsi is not None else 'N/A'} | Score: {score:.2f}\n"
+                    )
+
+            if best_result:
+                score, pair, period, direction, rsi = best_result
+                emoji = "🟢" if direction == "BUY" else "🔴"
+                msg = (
+                    f"🌟 **Best Opportunity Found!**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"{emoji} **{pair}**\n"
+                    f"⏰ **Timeframe:** {period} min\n"
+                    f"📊 **Signal:** {direction}\n"
+                    f"📈 **RSI:** {rsi if rsi is not None else 'N/A'}\n"
+                    f"⭐ **Confidence Score:** {score:.2f} (distance from RSI 50)\n\n"
+                    f"💡 This is the strongest signal right now across all pairs and timeframes."
+                    f"{summary}"
+                )
             else:
-                result_msg = "No strongly aligned pairs found at this time."
-
-            await processing_msg.edit(result_msg)
+                msg = (
+                    "🌟 **No strong opportunity found at this time.**\n\n"
+                    "Try again later or analyze a different asset type."
+                )
+            await processing_msg.edit(msg, parse_mode='markdown')
         except Exception as e:
-            print(f"⚠️ [ERROR] Error in handle_global_analysis: {e}")
-            await event.respond("An error occurred during global analysis. Please try again later.")
+            print(f"⚠️ [ERROR] Error in handle_best_opportunity: {e}")
+            await event.respond("An error occurred while searching for the best opportunity.")
 
 if __name__ == "__main__":
     bot_client = TelegramBotClient()
