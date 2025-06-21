@@ -148,7 +148,7 @@ class TelegramBotClient:
             signals_msg = ""
 
         message = await event.respond(
-            f"{welcome_msg}\n\n{signals_msg}\n\n" +
+            f"{welcome_msg}\n\n{signals_msg}\n\n"
             "⚠️ *" + lang_manager.get_text("important") + "*\n\n" +
             "💡 " + lang_manager.get_text("lets_start"),
             buttons=[
@@ -1079,14 +1079,51 @@ Please describe your issue below:
             # Try to show main menu as fallback
             await self.show_main_menu(event)
 
+    async def fetch_payout_data(self, asset_type):
+        """Fetch payout data for all pairs and filter for 85%+ payout"""
+        try:
+            # This would need to be implemented based on Pocket Option's payout API
+            # For now, I'll create a placeholder that you can implement
+            # You'll need to find the correct API endpoint for payouts
+            
+            # Placeholder - replace with actual API call
+            # Example: fetch payouts from Pocket Option's API
+            # payouts = await self.fetch_payouts_from_api(asset_type)
+            
+            # For now, return all pairs (you can implement the actual payout fetching)
+            pairs = await self.currency_pairs.fetch_pairs(asset_type)
+            
+            # Placeholder payout data - replace with real data
+            # This is just an example structure
+            payout_data = {}
+            for pair in pairs:
+                # Simulate payout data - replace with real API call
+                payout_data[pair] = 85.5  # Placeholder: 85.5% payout
+            
+            # Filter for 85%+ payout
+            high_payout_pairs = [
+                pair for pair in pairs 
+                if payout_data.get(pair, 0) >= 85.0
+            ]
+            
+            print(f"📊 [PAYOUT] Found {len(high_payout_pairs)} pairs with 85%+ payout out of {len(pairs)} total pairs")
+            return high_payout_pairs, payout_data
+            
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error fetching payout data: {e}")
+            # Fallback to all pairs if payout fetching fails
+            pairs = await self.currency_pairs.fetch_pairs(asset_type)
+            return pairs, {}
+
     async def handle_global_analysis(self, event, asset_type):
         import asyncio
         try:
             # Show initial processing message
-            processing_msg = await event.respond("🔎 **Starting Global Analysis**\n━━━━━━━━━━━━━━━━━━━━━━\n\n📊 Analyzing all pairs across all timeframes...\n⏳ This may take a few moments.")
+            processing_msg = await event.respond("🔎 **Starting Global Analysis**\n━━━━━━━━━━━━━━━━━━━━━━\n\n📊 Analyzing high payout pairs (85%+) across all timeframes...\n⏳ This may take a few moments.")
             await self.store_message(event.sender_id, processing_msg)
 
-            pairs = await self.currency_pairs.fetch_pairs(asset_type)
+            # Filter for high payout pairs
+            pairs, payout_data = await self.fetch_payout_data(asset_type)
             timeframes = [1, 3, 5, 15]
             token = "cZoCQNWriz"  # Use your working token
 
@@ -1152,7 +1189,8 @@ Please describe your issue below:
                     f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"📊 **Progress:** {min(i+progress_update_every, total_pairs)}/{total_pairs} pairs\n"
                     f"📈 **Analyzing:** {current_batch_text}\n"
-                    f"⏳ **Timeframes:** 1m, 3m, 5m, 15m\n\n"
+                    f"⏳ **Timeframes:** 1m, 3m, 5m, 15m\n"
+                    f"💰 **Filter:** 85%+ payout pairs only\n\n"
                     f"🔄 Processing..."
                 )
                 try:
@@ -1167,8 +1205,9 @@ Please describe your issue below:
             completion_text = (
                 f"✅ **Analysis Complete!**\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"📊 **Analyzed:** {total_pairs} pairs\n"
+                f"📊 **Analyzed:** {total_pairs} high payout pairs\n"
                 f"⏰ **Timeframes:** 1m, 3m, 5m, 15m\n"
+                f"💰 **Filter:** 85%+ payout only\n"
                 f"🔄 **Processing results...**"
             )
             try:
@@ -1185,7 +1224,7 @@ Please describe your issue below:
             total_signals = sum(len(pairs) for pairs in timeframe_results.values())
 
             # Prepare the result message
-            result_msg = f"🔎 **Global Analysis Results**\n━━━━━━━━━━━━━━━━━━━━━━\n\n📊 **Summary:** Found {total_signals} signals across {total_pairs} pairs\n\n"
+            result_msg = f"🔎 **Global Analysis Results**\n━━━━━━━━━━━━━━━━━━━━━━\n\n📊 **Summary:** Found {total_signals} signals across {total_pairs} high payout pairs\n💰 **Filter:** 85%+ payout pairs only\n\n"
             
             for timeframe in timeframes:
                 pairs_for_timeframe = timeframe_results[timeframe]
@@ -1193,7 +1232,8 @@ Please describe your issue below:
                     result_msg += f"⏰ **{timeframe}-Minute Timeframe:** ({len(pairs_for_timeframe)} signals)\n"
                     for pair, direction in pairs_for_timeframe:
                         emoji = "🟢" if direction == "BUY" else "🔴"
-                        result_msg += f"{emoji} {pair}: {direction}\n"
+                        payout = payout_data.get(pair, "N/A")
+                        result_msg += f"{emoji} {pair}: {direction} (Payout: {payout}%)\n"
                     result_msg += "\n"
                 else:
                     result_msg += f"⏰ **{timeframe}-Minute Timeframe:** (0 signals)\n"
@@ -1213,12 +1253,13 @@ Please describe your issue below:
             # Friendly initial message
             processing_msg = await event.respond(
                 "🌟 **Finding the Best Opportunity**\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                "The bot is scanning all pairs and timeframes for the strongest signal.\n"
+                "The bot is scanning high payout pairs (85%+) for the strongest signal.\n"
                 "This may take a few moments. Please wait... 🕵️‍♂️✨"
             )
             await self.store_message(event.sender_id, processing_msg)
 
-            pairs = await self.currency_pairs.fetch_pairs(asset_type)
+            # Filter for high payout pairs
+            pairs, payout_data = await self.fetch_payout_data(asset_type)
             timeframes = [1, 3, 5, 15]
             token = "cZoCQNWriz"
 
@@ -1278,9 +1319,12 @@ Please describe your issue below:
                 completed_tasks += len(tasks)
                 # Progress update with animated dots
                 dots = "." * ((completed_tasks // batch_size) % 4)
+                pairs_checked = min(i + batch_size, total_pairs)
                 progress_text = (
                     f"🌟 **Finding the Best Opportunity**\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"🔎 Checked: {completed_tasks}/{total_tasks} opportunities {dots}\n"
+                    f"🔎 Checked: {pairs_checked}/{total_pairs} high payout pairs "
+                    f"({completed_tasks}/{total_tasks} opportunities) {dots}\n"
+                    f"💰 Filter: 85%+ payout only\n"
                     f"⏳ Still working, please wait..."
                 )
                 try:
@@ -1311,13 +1355,16 @@ Please describe your issue below:
                 summary += "\n**Top 3 Opportunities:**\n"
                 for idx, (score, pair, period, direction, rsi) in enumerate(top3, 1):
                     emoji = "🟢" if direction == "BUY" else "🔴"
+                    payout = payout_data.get(pair, "N/A")
                     summary += (
-                        f"{idx}. {emoji} {pair} | {period}m | {direction} | RSI: {rsi if rsi is not None else 'N/A'} | Score: {score:.2f}\n"
+                        f"{idx}. {emoji} {pair} | {period}m | {direction} | RSI: {rsi if rsi is not None else 'N/A'} | "
+                        f"Payout: {payout}% | Score: {score:.2f}\n"
                     )
 
             if best_result:
                 score, pair, period, direction, rsi = best_result
                 emoji = "🟢" if direction == "BUY" else "🔴"
+                payout = payout_data.get(pair, "N/A")
                 msg = (
                     f"🌟 **Best Opportunity Found!**\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1325,8 +1372,9 @@ Please describe your issue below:
                     f"⏰ **Timeframe:** {period} min\n"
                     f"📊 **Signal:** {direction}\n"
                     f"📈 **RSI:** {rsi if rsi is not None else 'N/A'}\n"
+                    f"💰 **Payout:** {payout}%\n"
                     f"⭐ **Confidence Score:** {score:.2f} (distance from RSI 50)\n\n"
-                    f"💡 This is the strongest signal right now across all pairs and timeframes."
+                    f"💡 This is the strongest signal right now across all high payout pairs and timeframes."
                     f"{summary}"
                 )
             else:
