@@ -1,0 +1,84 @@
+[
+  {
+    "user_id": 1885741502,
+    "timestamp": "2025-06-23T06:43:16.921119",
+    "pair": "\ud83c\uddf3\ud83c\uddff\ud83c\uddfa\ud83c\uddf8 NZD/USD OTC",
+    "expiration": 3,
+    "analysis": "\ud83d\udcca\ud83d\udd2e Your magic signal is ready for \ud83c\uddf3\ud83c\uddff\ud83c\uddfa\ud83c\uddf8 NZD/USD OTC! \ud83d\udd2e\ud83d\udcca\n\n\ud83d\udcb9 Signal: SELL Signal\n\ud83d\udcc8 Support Level: 0.67483 \ud83d\udd3b\n\ud83d\udcc9 Resistance Level: 0.67499 \ud83d\udd3a\n\n\u2728\ud83d\udca1 Market magic is on your side! Good luck with your trades! \u2728\n\n\ud83d\udd01 Press the button below to get a new signal! \ud83d\udd01",
+    "indicators": {
+      "RSI": 24.999999999958362,
+      "EMA": 0.6748768828337139,
+      "MACD": null,
+      "Bollinger Bands": {
+        "Upper Band": 0.6750121911868943,
+        "Lower Band": 0.6748058088131057,
+        "Middle Band": 0.674909
+      },
+      "Stochastic Oscillator": {
+        "%K": 18.18181818174478,
+        "%D": 6.060606060581594
+      },
+      "Support and Resistance": {
+        "Support": 0.67483,
+        "Resistance": 0.67499
+      },
+      "Keltner Channels": {
+        "Upper Band": 0.6749190787190246,
+        "Lower Band": 0.6748590787190246,
+        "Middle Line": 0.6748890787190246
+      },
+      "Parabolic SAR": 0.6748823925853753,
+      "Fibonacci Retracement": {
+        "0%": 0.67499,
+        "23.6%": 0.67495224,
+        "38.2%": 0.67492888,
+        "50%": 0.67491,
+        "61.8%": 0.6748911200000001,
+        "100%": 0.67483
+      }
+    },
+    "signal": "SELL Signal",
+    "result": "plus"
+  },
+  {
+    "user_id": 1885741502,
+    "timestamp": "2025-06-23T06:51:34.766506",
+    "pair": "\ud83c\uddf3\ud83c\uddff\ud83c\uddfa\ud83c\uddf8 NZD/USD OTC",
+    "expiration": 3,
+    "analysis": "\ud83d\udcca\ud83d\udd2e Your magic signal is ready for \ud83c\uddf3\ud83c\uddff\ud83c\uddfa\ud83c\uddf8 NZD/USD OTC! \ud83d\udd2e\ud83d\udcca\n\n\ud83d\udcb9 Signal: SELL Signal\n\ud83d\udcc8 Support Level: 0.67643 \ud83d\udd3b\n\ud83d\udcc9 Resistance Level: 0.67653 \ud83d\udd3a\n\n\u2728\ud83d\udca1 Market magic is on your side! Good luck with your trades! \u2728\n\n\ud83d\udd01 Press the button below to get a new signal! \ud83d\udd01",
+    "indicators": {
+      "RSI": 45.4545454545684,
+      "EMA": 0.6764738086449842,
+      "MACD": null,
+      "Bollinger Bands": {
+        "Upper Band": 0.6765517759235217,
+        "Lower Band": 0.6764242240764783,
+        "Middle Band": 0.676488
+      },
+      "Stochastic Oscillator": {
+        "%K": 60.00000000006661,
+        "%D": 36.666666666688876
+      },
+      "Support and Resistance": {
+        "Support": 0.67643,
+        "Resistance": 0.67653
+      },
+      "Keltner Channels": {
+        "Upper Band": 0.6765064536522937,
+        "Lower Band": 0.6764524536522937,
+        "Middle Line": 0.6764794536522937
+      },
+      "Parabolic SAR": 0.6764774889807154,
+      "Fibonacci Retracement": {
+        "0%": 0.67653,
+        "23.6%": 0.6765064,
+        "38.2%": 0.6764918,
+        "50%": 0.67648,
+        "61.8%": 0.6764682,
+        "100%": 0.67643
+      }
+    },
+    "signal": "SELL Signal",
+    "result": "plus"
+  }
+]

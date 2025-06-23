@@ -13,11 +13,13 @@ from language_manager import LanguageManager
 from user_manager import UserManager
 from support_manager import SupportManager
 import json
+from transaction_logger import TransactionLogger
 
 # Initialize managers
 lang_manager = LanguageManager()
 user_manager = UserManager()
 support_manager = SupportManager()
+transaction_logger = TransactionLogger()  # <-- Add this line
 
 class TelegramBotClient:
     def __init__(self):
@@ -92,7 +94,7 @@ class TelegramBotClient:
             self.client.add_event_handler(self.handle_support_command, events.NewMessage(pattern='/support'))
             self.client.add_event_handler(
                 self.handle_admin_command, 
-                events.NewMessage(pattern='/approve|/pending|/stats|/addadmin|/removeadmin|/listadmins|/tickets|/debug')
+                events.NewMessage(pattern='/approve|/pending|/stats|/addadmin|/removeadmin|/listadmins|/tickets|/debug|/transactions')
             )
             self.client.add_event_handler(self.handle_asset_selection, events.CallbackQuery)
             self.client.add_event_handler(
@@ -101,6 +103,7 @@ class TelegramBotClient:
             )
             # Add handler for regular messages
             self.client.add_event_handler(self.handle_message, events.NewMessage)
+            self.client.add_event_handler(self.handle_trade_result_callback, events.CallbackQuery(pattern='^trade_result:'))
 
             print("✅ [INFO] All event handlers registered successfully")
             await self.client.run_until_disconnected()
@@ -310,36 +313,50 @@ class TelegramBotClient:
                     support=support if support is not None else 'N/A',
                     resistance=resistance if resistance is not None else 'N/A'
                 )
-
+                # Record the transaction
+                transaction_id = transaction_logger.add_transaction(
+                    user_id=user_id,
+                    pair=selected_pair,
+                    expiration=time_choice,
+                    analysis=signal_response,
+                    indicators=results.get('Indicators', {}) if isinstance(results, dict) else {},
+                    signal=direction
+                )
                 # Generate the chart
                 chart_plotter = TradingChartPlotter(history_data, selected_pair, time_mapping[time_choice])
                 chart_image = chart_plotter.plot_trading_chart()
-
                 if chart_image:
-                    # Save the image as a temporary PNG file
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
                         temp_file_path = temp_file.name
                         temp_file.write(chart_image.read())
-
-                    # Send the chart image as a photo
                     chart_msg = await self.client.send_file(
                         response.sender_id,
                         temp_file_path,
                         force_document=False
                     )
                     await self.store_message(response.sender_id, chart_msg)
-
-                    signal_msg = await response.respond(signal_response)
-                    await self.store_message(response.sender_id, signal_msg)
-
-                    # Clean up the temporary file
+                    # Send signal with feedback buttons
+                    feedback_msg = await response.respond(
+                        f"{signal_response}\n\n<b>After the trade closes, please let us know if it was a WIN or LOSS by pressing a button below:</b>",
+                        buttons=[
+                            [Button.inline("✅ Plus", f"trade_result:{transaction_id}:plus")],
+                            [Button.inline("❌ Minus", f"trade_result:{transaction_id}:minus")]
+                        ],
+                        parse_mode='html'
+                    )
+                    await self.store_message(response.sender_id, feedback_msg)
                     os.remove(temp_file_path)
                 else:
                     error_msg = await response.respond(lang_manager.get_text("failed_to_generate_chart"))
                     await self.store_message(response.sender_id, error_msg)
-                    
-                    signal_msg = await response.respond(signal_response)
-                    await self.store_message(response.sender_id, signal_msg)
+                    feedback_msg = await response.respond(
+                        signal_response,
+                        buttons=[
+                            [Button.inline("✅ Plus", f"trade_result:{transaction_id}:plus")],
+                            [Button.inline("❌ Minus", f"trade_result:{transaction_id}:minus")]
+                        ]
+                    )
+                    await self.store_message(response.sender_id, feedback_msg)
 
             else:
                 error_msg = await response.respond(
@@ -984,6 +1001,21 @@ Please describe your issue below:
                     await event.respond("User not found")
             except ValueError:
                 await event.respond("Invalid user ID")
+
+        elif command == "transactions":
+            transactions = transaction_logger.get_all()
+            if not transactions:
+                await event.respond("No transactions recorded yet.")
+                return
+            # Show only the last 10 transactions for brevity
+            last = transactions[-10:]
+            msg = "<b>Last {} Transactions:</b>\n".format(len(last))
+            for i, t in enumerate(last, 1):
+                msg += (f"\n<b>{i}.</b> Pair: <code>{t['pair']}</code> | Exp: <code>{t['expiration']}</code> | "
+                        f"Signal: <b>{t['signal']}</b> | Result: <b>{t['result'].upper()}</b>\n"
+                        f"Time: <code>{t['timestamp']}</code> | User: <code>{t['user_id']}</code>\n")
+            await event.respond(msg, parse_mode='html')
+            return
 
     async def handle_help_command(self, event):
         """Handle the help command"""
@@ -2208,6 +2240,29 @@ Please describe your issue below:
         except Exception as e:
             print(f"⚠️ [TIME] Error in time-based signal generation: {e}")
             return "NO_SIGNAL"
+
+    async def handle_trade_result_callback(self, event):
+        try:
+            data = event.data.decode('utf-8')
+            if not data.startswith('trade_result:'):
+                return
+            parts = data.split(':')
+            if len(parts) != 3:
+                await event.respond("Invalid feedback format.")
+                return
+            transaction_id = int(parts[1])
+            result = parts[2]
+            if result not in ['plus', 'minus']:
+                await event.respond("Invalid result.")
+                return
+            updated = transaction_logger.update_result(transaction_id, result)
+            if updated:
+                await event.respond(f"Thank you! Your feedback has been recorded as {'WIN' if result == 'plus' else 'LOSS'}.")
+            else:
+                await event.respond("Could not update transaction. Please try again.")
+        except Exception as e:
+            print(f"[ERROR] handle_trade_result_callback: {e}")
+            await event.respond("An error occurred while recording your feedback.")
 
 if __name__ == "__main__":
     bot_client = TelegramBotClient()
