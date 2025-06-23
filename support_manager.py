@@ -43,12 +43,14 @@ class SupportManager:
         except Exception as e:
             print(f"⚠️ [ERROR] Failed to save tickets: {e}")
 
-    def create_ticket(self, user_id, username=None):
-        """Create a new support ticket"""
+    def create_ticket(self, user_id, username=None, category=None, priority=None):
+        """Create a new support ticket with category and priority"""
         ticket_id = str(uuid.uuid4())[:8]
         self.tickets[ticket_id] = {
             'user_id': str(user_id),
             'username': username,
+            'category': category,
+            'priority': priority,
             'status': 'open',
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat(),
