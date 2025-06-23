@@ -6,3 +6,4 @@ python-dotenv
 asyncio
 datetime
 websockets
+openpyxl
