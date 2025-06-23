@@ -109,5 +109,12 @@
     "support_reopen_ticket": "🔓 Reopen Ticket",
     "support_reply": "💬 Reply",
     "support_enter_message": "Please enter your message:",
-    "support_ticket_created_admin": "🔔 New support ticket from {username} (ID: {user_id})\nTicket ID: {ticket_id}"
+    "support_ticket_created_admin": "🔔 New support ticket from {username} (ID: {user_id})\nTicket ID: {ticket_id}",
+    "main_menu": "🤖 *Trading Bot Menu*\n━━━━━━━━━━━━━━━━━━━━━━\n\nSelect an option to begin:",
+    "favorites_empty": "⭐ You haven't added any pairs to your favorites yet.\nTo add pairs, select them from Regular or OTC assets and click the star button.",
+    "favorites_title": "⭐ *My Favorite Pairs*\n━━━━━━━━━━━━━━━━━━━━━━",
+    "favorites_select": "Select a pair to analyze:",
+    "favorites_added": "✅ Added to favorites!",
+    "favorites_removed": "✅ Removed from favorites!",
+    "favorites_error": "❌ Failed to update favorites"
 } 

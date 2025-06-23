@@ -119,111 +119,214 @@ class TelegramBotClient:
         if user_manager.add_user(user_id, username):
             user = user_manager.get_user(user_id)
             if user['is_admin']:
-                welcome_msg = lang_manager.get_text("welcome_admin")  # Use admin-specific welcome message
+                welcome_msg = (
+                    "👋 *Welcome, Admin!*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "⚠️ *Important: This is not a button for easy money! "
+                    "Remember risk management 💰 and discipline 📊*\n\n"
+                    "As an admin, you have access to additional commands and features."
+                )
             elif user['is_approved']:
-                welcome_msg = lang_manager.get_text("welcome_approved")
+                welcome_msg = (
+                    "👋 *Welcome!*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "⚠️ *Important: This is not a button for easy money! "
+                    "Remember risk management 💰 and discipline 📊*\n\n"
+                    "Your account is approved and ready to use."
+                )
             else:
-                welcome_msg = lang_manager.get_text("welcome_pending")
+                welcome_msg = (
+                    "👋 *Welcome!*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "⚠️ *Important: This is not a button for easy money! "
+                    "Remember risk management 💰 and discipline 📊*\n\n"
+                    "Your account is pending approval. Please wait for admin confirmation."
+                )
         else:
             user = user_manager.get_user(user_id)
             if user['is_admin']:
-                welcome_msg = lang_manager.get_text("welcome_admin")  # Use admin-specific welcome message
+                welcome_msg = (
+                    "👋 *Welcome back, Admin!*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "⚠️ *Important: This is not a button for easy money! "
+                    "Remember risk management 💰 and discipline 📊*\n\n"
+                    "Ready to manage and monitor the system."
+                )
             elif user['is_approved']:
-                welcome_msg = lang_manager.get_text("welcome_approved")
+                welcome_msg = (
+                    "👋 *Welcome back!*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "⚠️ *Important: This is not a button for easy money! "
+                    "Remember risk management 💰 and discipline 📊*\n\n"
+                    "Ready to continue trading."
+                )
             else:
-                welcome_msg = lang_manager.get_text("welcome_trial")
+                welcome_msg = (
+                    "👋 *Welcome back!*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "⚠️ *Important: This is not a button for easy money! "
+                    "Remember risk management 💰 and discipline 📊*\n\n"
+                    "You're in trial mode. Limited signals available."
+                )
 
         await self.show_main_menu(event, welcome_msg)
 
-    async def show_main_menu(self, event, welcome_msg=None):
-        if welcome_msg is None:
-            welcome_msg = lang_manager.get_text("welcome")
+    async def show_main_menu(self, event, custom_message=None):
+        """Show the main menu with all available options"""
+        try:
+            default_message = (
+                "🤖 *Trading Bot Menu*\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "⚠️ *Important: This is not a button for easy money! "
+                "Remember risk management 💰 and discipline 📊*\n\n"
+                "Select an option to begin:"
+            )
 
-        user_id = event.sender_id
-        user = user_manager.get_user(user_id)
-        
-        if user:
-            if not user['is_approved'] and not user['is_admin']:  # Only show for non-approved, non-admin users
-                signals_msg = lang_manager.get_text("trial_signals_remaining").format(count=user['signals_remaining'])
-            else:
-                signals_msg = ""
-        else:
-            signals_msg = ""
+            # Use custom message if provided, otherwise use default
+            message = custom_message if custom_message else default_message
 
-        message = await event.respond(
-            f"{welcome_msg}\n\n{signals_msg}\n\n"
-            "⚠️ *" + lang_manager.get_text("important") + "*\n\n" +
-            "💡 " + lang_manager.get_text("lets_start"),
-                buttons=[
-                [Button.inline("1️⃣ " + lang_manager.get_text("otc_assets"), b"otc")],
-                [Button.inline("2️⃣ " + lang_manager.get_text("regular_assets"), b"regular_assets")],
-                [Button.inline("🌐 " + lang_manager.get_text("change_language"), b"change_language")]
+            buttons = [
+                [
+                    Button.inline("🌟 Regular Assets", b"asset:regular_assets"),
+                    Button.inline("💎 OTC Assets", b"asset:otc")
+                ],
+                [
+                    Button.inline("⭐ My Favorites", b"favorites:view")
+                ],
+                [
+                    Button.inline("❓ Help", b"menu:help")
+                ]
             ]
-        )
-        await self.store_message(event.sender_id, message)
+
+            # For new message
+            if isinstance(event, events.NewMessage.Event):
+                await event.respond(message, buttons=buttons, parse_mode='markdown')
+            # For callback query (edit existing message)
+            else:
+                await event.edit(message, buttons=buttons, parse_mode='markdown')
+
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in show_main_menu: {e}")
 
     async def handle_asset_selection(self, event):
-        user_id = event.sender_id
-        
-        # Check if user can use signals
-        if not user_manager.can_use_signal(user_id):
-            user = user_manager.get_user(user_id)
-            if not user:
-                await event.respond(lang_manager.get_text("user_not_found"))
-                return
-            elif not user['is_approved']:
-                # Only show pending approval message if they have no signals left
-                if user['signals_remaining'] <= 0:
-                    await event.respond(lang_manager.get_text("user_not_approved"))
-                    return
-                else:
-                    await event.respond(lang_manager.get_text("no_signals_remaining"))
-                    return
-
-        selected_asset = event.data.decode('utf-8')
-
-        # Initialize request count for new users
-        if user_id not in self.user_request_count:
-            self.user_request_count[user_id] = 0
-
-        # Increment request count
-        self.user_request_count[user_id] += 1
-
+        """Handle asset selection callbacks"""
         try:
-            if selected_asset == "change_language":
-                await self.show_language_selection(event)
-            elif selected_asset in ["otc", "regular_assets"]:
+            user_id = event.sender_id
+            data = event.data.decode('utf-8')
+            print(f"🔍 [DEBUG] Received asset selection data: {data}")
+
+            # Ignore trade_result callbacks (handled elsewhere)
+            if data.startswith('trade_result:'):
+                print(f"[INFO] Skipping trade_result callback in handle_asset_selection: {data}")
+                return
+
+            # Check if user can use signals (except for favorites and menu navigation)
+            if not data.startswith(('favorites:', 'menu:')):
+                # Admins always allowed
+                if user_manager.is_admin(user_id):
+                    pass
+                elif not user_manager.can_use_signal(user_id):
+                    user = user_manager.get_user(user_id)
+                    if not user:
+                        await event.answer(lang_manager.get_text("user_not_found"))
+                        return
+                    elif not user['is_approved']:
+                        if user['signals_remaining'] <= 0:
+                            await event.answer(lang_manager.get_text("user_not_approved"))
+                            return
+                    else:
+                        await event.answer(lang_manager.get_text("no_signals_remaining"))
+                        return
+
+            # Initialize request count for new users
+            if user_id not in self.user_request_count:
+                self.user_request_count[user_id] = 0
+
+            # Split the data and validate format
+            parts = data.split(':')
+            if len(parts) < 2:
+                # Special case: menu:help
+                if data == 'menu:help':
+                    await self.handle_help_command(event)
+                    return
+                print(f"⚠️ [ERROR] Invalid data format: {data}")
+                await event.answer("❌ Invalid request format")
+                return
+
+            action = parts[0]
+            subaction = parts[1]
+
+            if action == 'favorites':
+                if subaction == 'view':
+                    await self.show_favorites_menu(event)
+                elif subaction in ['add', 'remove'] and len(parts) >= 3:
+                    pair = parts[2]
+                    if subaction == 'add':
+                        if user_manager.add_favorite_pair(user_id, pair):
+                            await event.answer("✅ Added to favorites!")
+                        else:
+                            await event.answer("❌ Failed to add to favorites")
+                    else:  # remove
+                        if user_manager.remove_favorite_pair(user_id, pair):
+                            await event.answer("✅ Removed from favorites!")
+                            await self.show_favorites_menu(event)
+                        else:
+                            await event.answer("❌ Failed to remove from favorites")
+
+            elif action == 'asset':
+                self.user_request_count[user_id] += 1
                 if self.user_request_count[user_id] > 1:
                     await self.delete_user_messages(user_id)
-                await self.display_currency_pairs(event, selected_asset)
-            elif selected_asset.startswith("pair:"):
-                selected_pair = selected_asset.split(":")[1]
-                await self.prompt_for_time(event, selected_pair)
-            elif selected_asset.startswith("lang:"):
-                new_language = selected_asset.split(":")[1]
-                if lang_manager.set_language(new_language):
-                    await event.respond(lang_manager.get_text("language_changed"))
+                await self.display_currency_pairs(event, subaction)
+
+            elif action == 'pair':
+                await self.show_pair_menu(event, subaction)
+
+            elif action == 'analyze' and len(parts) >= 3:
+                pair = parts[1]
+                timeframe = int(parts[2])
+                await self.process_selection(event, pair, timeframe)
+
+            elif action == 'analyze_all':
+                await self.handle_global_analysis(event, subaction)
+
+            elif action == 'best_opportunity':
+                await self.handle_best_opportunity(event, subaction)
+
+            elif action == 'menu':
+                if subaction == 'main':
+                    await self.show_main_menu(event)
+                elif subaction == 'help':
+                    await self.handle_help_command(event)
+
+            elif action == 'lang':
+                if lang_manager.set_language(subaction):
+                    await event.answer(lang_manager.get_text("language_changed"))
                 await self.show_main_menu(event)
-            elif selected_asset.startswith("analyze_all:"):
-                asset_type = selected_asset.split(":")[1]
-                await self.handle_global_analysis(event, asset_type)
-            elif selected_asset.startswith("best_opportunity:"):
-                asset_type = selected_asset.split(":")[1]
-                await self.handle_best_opportunity(event, asset_type)
+
+            else:
+                print(f"⚠️ [WARNING] Unhandled callback data: {data}")
+                await event.answer("❌ Invalid request")
+
+        except ValueError as ve:
+            print(f"⚠️ [ERROR] Value error in handle_asset_selection: {str(ve)}")
+            await event.answer("❌ Invalid input format")
         except Exception as e:
-            print(f"⚠️ [ERROR] Error in handle_asset_selection: {e}")
+            print(f"⚠️ [ERROR] Error in handle_asset_selection: {str(e)}")
             try:
+                await event.answer("❌ An error occurred")
                 await self.show_main_menu(event)
             except Exception as menu_error:
-                print(f"⚠️ [ERROR] Failed to show main menu: {menu_error}")
+                print(f"⚠️ [ERROR] Failed to show main menu: {str(menu_error)}")
 
     async def process_selection(self, response, selected_pair, time_choice):
         user_id = response.sender_id
         
-        # Use one signal
-        if not user_manager.use_signal(user_id):
-            await response.respond(lang_manager.get_text("no_signals_remaining"))
-            return
+        # Use one signal (admins always allowed)
+        if not user_manager.is_admin(user_id):
+            if not user_manager.use_signal(user_id):
+                await response.respond(lang_manager.get_text("no_signals_remaining"))
+                return
 
         try:
             # Update time mapping to match the `time_choice` values
@@ -1007,6 +1110,34 @@ Please describe your issue below:
             if not transactions:
                 await event.respond("No transactions recorded yet.")
                 return
+
+            # Check if export parameter is provided
+            if args and args[0] == "export":
+                try:
+                    # Export to Excel
+                    excel_file = transaction_logger.export_to_excel()
+                    await event.respond(
+                        "📊 **Exporting Transactions**\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        "Preparing Excel file with all transactions...",
+                        parse_mode='markdown'
+                    )
+                    # Send the Excel file
+                    await self.client.send_file(
+                        event.chat_id,
+                        excel_file,
+                        caption="📊 Here's your transaction export file",
+                        force_document=True
+                    )
+                    # Clean up the file
+                    import os
+                    os.remove(excel_file)
+                    return
+                except Exception as e:
+                    print(f"⚠️ [ERROR] Failed to export transactions: {e}")
+                    await event.respond("Failed to export transactions. Please try again.")
+                    return
+
             # Show only the last 10 transactions for brevity
             last = transactions[-10:]
             msg = "<b>Last {} Transactions:</b>\n".format(len(last))
@@ -1014,6 +1145,10 @@ Please describe your issue below:
                 msg += (f"\n<b>{i}.</b> Pair: <code>{t['pair']}</code> | Exp: <code>{t['expiration']}</code> | "
                         f"Signal: <b>{t['signal']}</b> | Result: <b>{t['result'].upper()}</b>\n"
                         f"Time: <code>{t['timestamp']}</code> | User: <code>{t['user_id']}</code>\n")
+            
+            # Add export instructions
+            msg += "\n<b>💡 Tip:</b> Use <code>/transactions export</code> to download all transactions as Excel file"
+            
             await event.respond(msg, parse_mode='html')
             return
 
@@ -1775,11 +1910,11 @@ Please describe your issue below:
                 asset = "_".join(cleaned_pair.replace("/", "").split())
                 if asset.endswith("OTC"):
                     asset = asset[:-3] + "_otc"
-                
+
                 print(f"🔍 [ANALYSIS] Analyzing pair: {pair} -> asset: {asset}")
-                
+
                 pair_results = {}
-                
+
                 # Fetch data for all timeframes in parallel
                 tasks = [self.fetch_summary_with_handling(asset, period, token) for period in timeframes]
                 timeframe_data = await asyncio.gather(*tasks)
@@ -1789,34 +1924,25 @@ Please describe your issue below:
                     direction = None
                     if results and history_data:
                         print(f"🔍 [ANALYSIS] {pair} {period}m: Got data, analyzing...")
-                        
-                        # Debug: Check the raw data structure
                         print(f"🔍 [ANALYSIS] {pair} {period}m: Results keys: {list(results.keys()) if isinstance(results, dict) else 'Not a dict'}")
                         print(f"🔍 [ANALYSIS] {pair} {period}m: History data length: {len(history_data) if history_data else 0}")
                         if history_data and len(history_data) > 0:
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Sample history data: {history_data[:3]}")
-                        
                         history_summary = HistorySummary(history_data, period)
                         signal_info = history_summary.generate_signal(pair, period)
-                        
-                        # Fallback signal generation for limited data
                         if not signal_info or signal_info == "NO_SIGNAL" or "НЕТ СИГНАЛА" in str(signal_info):
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Trying fallback signal generation...")
                             direction = self.generate_fallback_signal(history_data, pair, period)
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Fallback signal = {direction}")
                         else:
-                            # Extract direction (BUY/SELL/NO_SIGNAL) from signal_info
                             if isinstance(signal_info, str):
                                 import re
-                                # More lenient signal detection for regular assets
                                 if re.search(r'ПРОДАТЬ|SELL|ПРОДАВАТЬ', signal_info, re.IGNORECASE):
                                     direction = "SELL"
                                 elif re.search(r'КУПИТЬ|BUY|ПОКУПАТЬ', signal_info, re.IGNORECASE):
                                     direction = "BUY"
                                 else:
-                                    # Check if there's any signal-like content
                                     if any(word in signal_info.upper() for word in ['SIGNAL', 'СИГНАЛ', 'TRADE', 'СДЕЛКА']):
-                                        # Try to infer direction from context
                                         if any(word in signal_info.upper() for word in ['UP', 'ВВЕРХ', 'РОСТ', 'ПОДЪЕМ']):
                                             direction = "BUY"
                                         elif any(word in signal_info.upper() for word in ['DOWN', 'ВНИЗ', 'ПАДЕНИЕ', 'СНИЖЕНИЕ']):
@@ -1834,20 +1960,17 @@ Please describe your issue below:
                                     direction = "NO_SIGNAL"
                             else:
                                 direction = "NO_SIGNAL"
-                        
                         print(f"🔍 [ANALYSIS] {pair} {period}m: Signal = {direction}")
                         print(f"🔍 [ANALYSIS] {pair} {period}m: Raw signal info: {signal_info}")
+                        if direction in ["BUY", "SELL"]:
+                            pair_results[period] = direction
+                            print(f"✅ [ANALYSIS] {pair} {period}m: Strong signal found: {direction}")
+                        else:
+                            print(f"⚠️ [ANALYSIS] {pair} {period}m: No strong signal")
                     else:
                         print(f"⚠️ [ANALYSIS] {pair} {period}m: No data received")
                         direction = "NO_SIGNAL"
-                    
-                    # Only store BUY or SELL signals (not NO_SIGNAL)
-                    if direction in ["BUY", "SELL"]:
-                        pair_results[period] = direction
-                        print(f"✅ [ANALYSIS] {pair} {period}m: Strong signal found: {direction}")
-                    else:
-                        print(f"⚠️ [ANALYSIS] {pair} {period}m: No strong signal")
-                
+
                 print(f"📊 [ANALYSIS] {pair}: Final results = {pair_results}")
                 return pair, pair_results
 
@@ -1908,7 +2031,7 @@ Please describe your issue below:
                         payout = payout_data.get(pair, "N/A")
                         result_msg += f"{emoji} {pair}: {direction} (Payout: {payout}%)\n"
                     result_msg += "\n"
-                else:
+            else:
                     result_msg += f"⏰ **{timeframe}-Minute Timeframe:** (0 signals)\n"
                     result_msg += "No strong signals found.\n\n"
 
@@ -2255,14 +2378,97 @@ Please describe your issue below:
             if result not in ['plus', 'minus']:
                 await event.respond("Invalid result.")
                 return
+            # Find the transaction robustly
+            transactions = transaction_logger.get_all()
+            transaction = None
+            for t in transactions:
+                if ('id' in t and t['id'] == transaction_id) or (not 'id' in t and transactions.index(t) + 1 == transaction_id):
+                    transaction = t
+                    break
+            if not transaction:
+                await event.respond("Transaction not found.")
+                return
+            # Update result
             updated = transaction_logger.update_result(transaction_id, result)
             if updated:
-                await event.respond(f"Thank you! Your feedback has been recorded as {'WIN' if result == 'plus' else 'LOSS'}.")
+                # Send feedback confirmation
+                feedback_msg = await event.respond(f"Thank you! Your feedback has been recorded as {'WIN' if result == 'plus' else 'LOSS'}.")
+                # Store the feedback message for auto-delete
+                await self.store_message(event.sender_id, feedback_msg)
+                # Show main menu
+                await self.show_main_menu(event)
+                # Trigger auto-delete of previous messages
+                await self.delete_user_messages(event.sender_id)
             else:
                 await event.respond("Could not update transaction. Please try again.")
         except Exception as e:
             print(f"[ERROR] handle_trade_result_callback: {e}")
             await event.respond("An error occurred while recording your feedback.")
+
+    async def show_pair_menu(self, event, pair):
+        """Show options for a specific pair"""
+        try:
+            # Add favorite button to the pair menu
+            is_favorite = pair in user_manager.get_favorite_pairs(event.sender_id)
+            favorite_button = Button.inline(
+                "⭐ Remove from Favorites" if is_favorite else "☆ Add to Favorites",
+                f"favorites:{'remove' if is_favorite else 'add'}:{pair}"
+            )
+            
+            buttons = [
+                [Button.inline("1min", f"analyze:{pair}:1"), 
+                 Button.inline("5min", f"analyze:{pair}:5"),
+                 Button.inline("15min", f"analyze:{pair}:15")],
+                [Button.inline("30min", f"analyze:{pair}:30"),
+                 Button.inline("1h", f"analyze:{pair}:60"),
+                 Button.inline("4h", f"analyze:{pair}:240")],
+                [favorite_button],
+                [Button.inline("🔙 Back", b"menu:main")]
+            ]
+            
+            message = (
+                f"📊 *{pair}*\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "Select timeframe to analyze:"
+            )
+            
+            await event.edit(message, buttons=buttons, parse_mode='markdown')
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in show_pair_menu: {e}")
+            await event.answer("❌ Failed to show pair menu")
+
+    async def show_favorites_menu(self, event):
+        """Show user's favorite pairs menu"""
+        try:
+            user_id = event.sender_id
+            favorites = user_manager.get_favorite_pairs(user_id)
+            
+            if not favorites:
+                message = (
+                    "⭐ *My Favorite Pairs*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "You haven't added any pairs to your favorites yet.\n"
+                    "To add pairs, select them from Regular or OTC assets and click the star button."
+                )
+                buttons = [[Button.inline("🔙 Back to Menu", b"menu:main")]]
+            else:
+                message = (
+                    "⭐ *My Favorite Pairs*\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "Select a pair to analyze:"
+                )
+                buttons = []
+                for pair in favorites:
+                    buttons.append([
+                        Button.inline(f"📊 {pair}", f"pair:{pair}"),
+                        Button.inline("❌", f"favorites:remove:{pair}")
+                    ])
+                buttons.append([Button.inline("🔙 Back to Menu", b"menu:main")])
+            
+            await event.edit(message, buttons=buttons, parse_mode='markdown')
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in show_favorites_menu: {e}")
+            await event.answer("❌ Failed to show favorites menu")
 
 if __name__ == "__main__":
     bot_client = TelegramBotClient()
