@@ -585,13 +585,14 @@ Please select an option below to get help or manage your tickets:
                         f"🎫 *Support Ticket #{ticket_id}*\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"👤 *From:* {username}\n"
+                        f"🆔 *User ID:* `{ticket.get('user_id', 'N/A')}`\n"
                         f"🗂️ *Category:* {category}\n"
                         f"⚡ *Priority:* {priority}\n"
                         f"📊 *Status:* {status}\n"
                         f"📅 *Created:* {created_date} {created_time}\n\n"
                         f"💬 *Messages:*\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                        f"{'\n'.join(messages)}"
+                        f"{'\\n'.join(messages)}"
                     )
                     
                     # Create action buttons
