@@ -63,59 +63,65 @@ class TransactionLogger:
             return self.transactions
 
     def export_to_excel(self, filename=None):
-        """Export all transactions to an Excel file, filling missing columns if needed"""
+        """Export all transactions to an Excel file, including detailed indicator data."""
         if not filename:
             filename = f'transactions_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
 
-        # Define required columns and their default values
-        required_columns = {
-            'id': None,  # Will fill with index+1 if missing
-            'timestamp': '',
-            'pair': '',
-            'expiration': '',
-            'signal': '',
-            'result': 'PENDING',
-            'user_id': ''
-        }
+        if not self.transactions:
+            print("No transactions to export.")
+            return None
 
-        # Prepare transactions with all required columns
-        fixed_transactions = []
+        # --- Data Preparation ---
+        records = []
         for idx, t in enumerate(self.transactions):
-            fixed = t.copy()
-            for col, default in required_columns.items():
-                if col not in fixed or fixed[col] == '':
-                    if col == 'id':
-                        fixed['id'] = idx + 1
-                    elif col == 'result':
-                        fixed['result'] = t.get('result', 'PENDING').upper()
-                    else:
-                        fixed[col] = default
-            fixed_transactions.append(fixed)
+            # Basic info
+            record = {
+                'Transaction ID': t.get('id', idx + 1),
+                'Date & Time': t.get('timestamp'),
+                'User ID': t.get('user_id'),
+                'Currency Pair': t.get('pair'),
+                'Expiration (min)': t.get('expiration'),
+                'Signal': t.get('signal', '').upper(),
+                'Result': t.get('result', 'PENDING').upper(),
+                'Analysis Summary': t.get('analysis', '')
+            }
+            
+            # Unpack the 'indicators' dictionary into separate columns
+            indicators = t.get('indicators', {})
+            if isinstance(indicators, dict):
+                for key, value in indicators.items():
+                    # Sanitize key for column header
+                    col_name = f"Indicator: {key}"
+                    record[col_name] = str(value) # Convert all to string to avoid type issues in Excel
+            
+            records.append(record)
 
-        # Convert to DataFrame
-        df = pd.DataFrame(fixed_transactions)
-
-        # Reorder and rename columns for better readability
-        columns = {
-            'id': 'Transaction ID',
-            'timestamp': 'Date & Time',
-            'pair': 'Currency Pair',
-            'expiration': 'Expiration (min)',
-            'signal': 'Signal',
-            'result': 'Result',
-            'user_id': 'User ID'
-        }
-
-        # Select and rename columns
-        df = df[list(columns.keys())].rename(columns=columns)
-
+        # --- DataFrame Creation ---
+        df = pd.DataFrame(records)
+        
+        # --- Formatting ---
         # Format timestamp
         df['Date & Time'] = pd.to_datetime(df['Date & Time'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # Capitalize result and signal
-        df['Result'] = df['Result'].str.upper()
-        df['Signal'] = df['Signal'].str.upper()
+        # Define the desired column order, putting indicators at the end
+        base_columns = [
+            'Transaction ID', 'Date & Time', 'User ID', 'Currency Pair', 
+            'Expiration (min)', 'Signal', 'Result', 'Analysis Summary'
+        ]
+        
+        # Get all unique indicator columns from the dataframe
+        indicator_columns = sorted([col for col in df.columns if col.startswith('Indicator:')])
+        
+        # Combine and ensure all columns exist, filling missing with empty string
+        final_columns = base_columns + indicator_columns
+        for col in final_columns:
+            if col not in df.columns:
+                df[col] = ''
+        
+        # Reorder the DataFrame
+        df = df[final_columns]
 
-        # Export to Excel
+        # --- Export ---
         df.to_excel(filename, index=False, engine='openpyxl')
+        print(f"✅ Successfully exported {len(records)} transactions to {filename}")
         return filename 
