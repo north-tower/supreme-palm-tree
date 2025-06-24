@@ -207,16 +207,18 @@ class TelegramBotClient:
                 # Admins always allowed
                 if user_manager.is_admin(user_id):
                     pass
-                elif not user_manager.can_use_signal(user_id):
+                else:
                     user = user_manager.get_user(user_id)
                     if not user:
                         await event.answer(lang_manager.get_text("user_not_found"))
                         return
                     elif not user['is_approved']:
-                        if user['signals_remaining'] <= 0:
-                            await event.answer(lang_manager.get_text("user_not_approved"))
-                            return
-                else:
+                        await event.answer(lang_manager.get_text("user_not_approved"))
+                        return
+                    elif not user['is_active']:
+                        await event.answer(lang_manager.get_text("user_not_active"))
+                        return
+                    elif user['signals_remaining'] <= 0:
                         await event.answer(lang_manager.get_text("no_signals_remaining"))
                         return
 
