@@ -174,7 +174,8 @@ class TelegramBotClient:
                     Button.inline(lang_manager.get_text("menu_button_favorites"), b"favorites:view")
                 ],
                 [
-                    Button.inline(lang_manager.get_text("menu_button_help"), b"menu:help")
+                    Button.inline(lang_manager.get_text("menu_button_help"), b"menu:help"),
+                    Button.inline(lang_manager.get_text("menu_button_language"), b"menu:language")
                 ]
             ]
 
@@ -282,6 +283,8 @@ class TelegramBotClient:
                     await self.show_main_menu(event)
                 elif subaction == 'help':
                     await self.handle_help_command(event)
+                elif subaction == 'language':
+                    await self.show_language_selection(event)
 
             elif action == 'lang':
                 if lang_manager.set_language(subaction):

@@ -80,7 +80,7 @@
     "admin_list": "👥 Admin List:\n{admins}",
     "no_admins": "No admins found.",
     "help_title": "✨ *Mystic Trader Bot Help* ✨\n━━━━━━━━━━━━━━━━━━━━━━",
-    "help_general": "📱 *General Commands*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`/start` - Start the bot\n`/help` - Show this help message\n`/support` - Access the support system",
+    "help_general": "📱 *General Commands*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`/start` - Start the bot\n`/help` - Show this help message\n`/language` - Change the bot's language\n`/support` - Access the support system",
     "help_admin": "👑 *Admin Commands*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`/approve <user_id>` - Approve a user\n`/activate <user_id>` - Activate a user\n`/deactivate <user_id>` - Deactivate a user\n`/addadmin <user_id>` - Add a new admin\n`/removeadmin <user_id>` - Remove an admin\n`/listadmins` - Show all admins\n`/pending` - Show pending users\n`/stats <user_id>` - Show user statistics",
     "help_trading": "💹 *Trading Commands*\n━━━━━━━━━━━━━━━━━━━━━━\n\nSelect from the menu to:\n\n• Choose OTC or Regular assets\n• Select currency pairs\n• Set trading timeframes",
     "help_support": "💬 *Support System*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`/support` - Access the support system\n\n• Create new support tickets\n• View your existing tickets\n• Reply to support messages\n• Close or reopen tickets",
@@ -124,6 +124,7 @@
     "menu_button_otc": "💎 OTC Assets",
     "menu_button_favorites": "⭐ My Favorites",
     "menu_button_help": "❓ Help",
+    "menu_button_language": "🌐 Language",
     "welcome_greeting_new": "👋 *Welcome!*",
     "welcome_greeting_return": "👋 *Welcome back!*",
     "welcome_status_admin": "As an admin, you have access to additional commands and features.",
@@ -132,8 +133,8 @@
     "welcome_status_back_admin": "Ready to manage and monitor the system.",
     "welcome_status_back_approved": "Ready to continue trading.",
     "welcome_status_back_pending": "You're in trial mode. Limited signals available.",
-    "pair_menu_prompt": "Select timeframe to analyze:",
-    "menu_button_add_favorite": "☆ Add to Favorites",
+    "pair_menu_prompt": "Please select an expiration time for analysis:",
+    "menu_button_add_favorite": "⭐ Add to Favorites",
     "menu_button_remove_favorite": "⭐ Remove from Favorites",
     "menu_button_back": "🔙 Back"
 } 
