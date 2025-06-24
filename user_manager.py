@@ -24,6 +24,11 @@ class UserManager:
                 user['is_admin'] = user_id in self.admin_ids
                 updated = True
             
+            # Add favorite_pairs field if missing
+            if 'favorite_pairs' not in user:
+                user['favorite_pairs'] = []
+                updated = True
+            
             # Ensure all required fields exist
             required_fields = {
                 'username': None,
@@ -103,7 +108,8 @@ class UserManager:
                     'is_approved': True,
                     'is_active': True,
                     'signals_remaining': float('inf'),
-                    'joined_date': datetime.now().isoformat()
+                    'joined_date': datetime.now().isoformat(),
+                    'favorite_pairs': []
                 }
             else:
                 self.users[admin_id]['is_admin'] = True
@@ -139,7 +145,8 @@ class UserManager:
                 'is_approved': False,
                 'is_active': True,
                 'signals_remaining': 3,  # Trial signals
-                'joined_date': datetime.now().isoformat()
+                'joined_date': datetime.now().isoformat(),
+                'favorite_pairs': []
             }
             self._save_users()
             return True
@@ -245,4 +252,29 @@ class UserManager:
             'is_admin': user['is_admin'],
             'signals_remaining': user['signals_remaining'],
             'joined_date': user['joined_date']
-        } 
+        }
+
+    def get_favorite_pairs(self, user_id):
+        """Get user's favorite pairs"""
+        user = self.get_user(user_id)
+        return user.get('favorite_pairs', []) if user else []
+
+    def add_favorite_pair(self, user_id, pair):
+        """Add a pair to user's favorites"""
+        user = self.get_user(user_id)
+        if user and pair not in user.get('favorite_pairs', []):
+            if 'favorite_pairs' not in user:
+                user['favorite_pairs'] = []
+            user['favorite_pairs'].append(pair)
+            self._save_users()
+            return True
+        return False
+
+    def remove_favorite_pair(self, user_id, pair):
+        """Remove a pair from user's favorites"""
+        user = self.get_user(user_id)
+        if user and pair in user.get('favorite_pairs', []):
+            user['favorite_pairs'].remove(pair)
+            self._save_users()
+            return True
+        return False 
