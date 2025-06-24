@@ -51,6 +51,7 @@ class UserManager:
                 self._save_users({})
         except Exception as e:
             print(f"⚠️ [ERROR] Failed to create data directory: {e}")
+            # Try to create in current directory if data directory fails
             self.users_file = 'users.json'
             if not os.path.exists(self.users_file):
                 self._save_users({})
@@ -131,22 +132,18 @@ class UserManager:
 
     def add_user(self, user_id, username=None):
         """Add a new user with trial signals"""
-        user_id = str(user_id)
-        is_new = user_id not in self.users
-        
-        if is_new:
-            self.users[user_id] = {
+        if str(user_id) not in self.users:
+            self.users[str(user_id)] = {
                 'username': username,
+                'is_admin': False,
                 'is_approved': False,
                 'is_active': True,
-                'is_admin': False,
-                'signals_remaining': float('inf'),
-                'joined_date': datetime.now().isoformat(),
-                'favorite_pairs': [],  # Add favorite pairs list
-                'last_active': datetime.now().isoformat()
+                'signals_remaining': 3,  # Trial signals
+                'joined_date': datetime.now().isoformat()
             }
             self._save_users()
-        return is_new
+            return True
+        return False
 
     def get_user(self, user_id):
         """Get user information"""
@@ -248,46 +245,4 @@ class UserManager:
             'is_admin': user['is_admin'],
             'signals_remaining': user['signals_remaining'],
             'joined_date': user['joined_date']
-        }
-
-    def add_favorite_pair(self, user_id, pair):
-        """Add a pair to user's favorites"""
-        user_id = str(user_id)
-        if user_id not in self.users:
-            return False
-        
-        if 'favorite_pairs' not in self.users[user_id]:
-            self.users[user_id]['favorite_pairs'] = []
-            
-        if pair not in self.users[user_id]['favorite_pairs']:
-            self.users[user_id]['favorite_pairs'].append(pair)
-            self._save_users()
-        return True
-
-    def remove_favorite_pair(self, user_id, pair):
-        """Remove a pair from user's favorites"""
-        user_id = str(user_id)
-        if user_id not in self.users:
-            return False
-            
-        if 'favorite_pairs' in self.users[user_id] and pair in self.users[user_id]['favorite_pairs']:
-            self.users[user_id]['favorite_pairs'].remove(pair)
-            self._save_users()
-        return True
-
-    def get_favorite_pairs(self, user_id):
-        """Get user's favorite pairs"""
-        user_id = str(user_id)
-        if user_id not in self.users:
-            return []
-        return self.users[user_id].get('favorite_pairs', [])
-
-    def clear_favorite_pairs(self, user_id):
-        """Clear all favorite pairs for a user"""
-        user_id = str(user_id)
-        if user_id not in self.users:
-            return False
-        
-        self.users[user_id]['favorite_pairs'] = []
-        self._save_users()
-        return True 
+        } 

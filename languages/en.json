@@ -137,7 +137,10 @@
     "menu_button_add_favorite": "⭐ Add to Favorites",
     "menu_button_remove_favorite": "⭐ Remove from Favorites",
     "menu_button_back": "🔙 Back",
-    "welcome_registration_prompt": "Not registered yet? Click the button below to sign up and get full access!",
-    "welcome_registration_button": "📝 Register Now",
-    "welcome_platform_button": "🌐 Trading Platform"
+    "welcome_promo": "🚀 Ready to start trading? <a href='https://u3.shortink.io/register?utm_campaign=793672&utm_source=affiliate&utm_medium=sr&a=lmgXB42ApLv7xW&ac=fiver&code=YDR181'>Sign up here</a> to get started with our platform!",
+    "trade_result_plus": "✅ WIN",
+    "trade_result_minus": "❌ LOSS",
+    "trade_feedback_thanks": "Thank you! Your feedback has been recorded.",
+    "signals": "Signals Remaining: {signals}",
+    "joined": "Joined: {joined}"
 } 

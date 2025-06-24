@@ -137,23 +137,19 @@ class TelegramBotClient:
                 status_msg = lang_manager.get_text("welcome_status_back_pending")
 
         warning_msg = lang_manager.get_text("main_menu_warning")
+        promo_msg = lang_manager.get_text("welcome_promo")
         
         welcome_msg = (
             f"{greeting}\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{promo_msg}\n\n"
             f"{warning_msg}\n\n"
             f"{status_msg}"
         )
 
-        user = user_manager.get_user(user_id)
-        is_approved = user['is_approved']
-        if not is_approved:
-            reg_text = lang_manager.get_text("welcome_registration_prompt")
-            welcome_msg += f"\n\n{reg_text}"
+        await self.show_main_menu(event, welcome_msg)
 
-        await self.show_main_menu(event, welcome_msg, show_platform_button=True, is_approved=is_approved)
-
-    async def show_main_menu(self, event, custom_message=None, show_platform_button=False, is_approved=False):
+    async def show_main_menu(self, event, custom_message=None):
         """Show the main menu with all available options"""
         try:
             # Use custom message for welcome, otherwise use translatable default
@@ -185,21 +181,12 @@ class TelegramBotClient:
                 ]
             ]
 
-            if show_platform_button:
-                if is_approved:
-                    button_text = lang_manager.get_text("welcome_platform_button")
-                else:
-                    button_text = lang_manager.get_text("welcome_registration_button")
-                
-                platform_url = "https://u3.shortink.io/register?utm_campaign=793672&utm_source=affiliate&utm_medium=sr&a=lmgXB42ApLv7xW&ac=fiver&code=YDR181"
-                buttons.insert(0, [Button.url(button_text, platform_url)])
-
             # For new message
             if isinstance(event, events.NewMessage.Event):
-                await event.respond(message, buttons=buttons, parse_mode='markdown')
+                await event.respond(message, buttons=buttons, parse_mode='html')
             # For callback query (edit existing message)
             else:
-                await event.edit(message, buttons=buttons, parse_mode='markdown')
+                await event.edit(message, buttons=buttons, parse_mode='html')
 
         except Exception as e:
             print(f"⚠️ [ERROR] Error in show_main_menu: {e}")
