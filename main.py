@@ -145,9 +145,15 @@ class TelegramBotClient:
             f"{status_msg}"
         )
 
-        await self.show_main_menu(event, welcome_msg)
+        user = user_manager.get_user(user_id)
+        is_approved = user['is_approved']
+        if not is_approved:
+            reg_text = lang_manager.get_text("welcome_registration_prompt")
+            welcome_msg += f"\n\n{reg_text}"
 
-    async def show_main_menu(self, event, custom_message=None):
+        await self.show_main_menu(event, welcome_msg, show_platform_button=True, is_approved=is_approved)
+
+    async def show_main_menu(self, event, custom_message=None, show_platform_button=False, is_approved=False):
         """Show the main menu with all available options"""
         try:
             # Use custom message for welcome, otherwise use translatable default
@@ -178,6 +184,15 @@ class TelegramBotClient:
                     Button.inline(lang_manager.get_text("menu_button_language"), b"menu:language")
                 ]
             ]
+
+            if show_platform_button:
+                if is_approved:
+                    button_text = lang_manager.get_text("welcome_platform_button")
+                else:
+                    button_text = lang_manager.get_text("welcome_registration_button")
+                
+                platform_url = "https://u3.shortink.io/register?utm_campaign=793672&utm_source=affiliate&utm_medium=sr&a=lmgXB42ApLv7xW&ac=fiver&code=YDR181"
+                buttons.insert(0, [Button.url(button_text, platform_url)])
 
             # For new message
             if isinstance(event, events.NewMessage.Event):
@@ -213,14 +228,14 @@ class TelegramBotClient:
                     if not user:
                         await event.answer(lang_manager.get_text("user_not_found"))
                         return
-                    elif not user['is_approved']:
-                        await event.answer(lang_manager.get_text("user_not_approved"))
-                        return
                     elif not user['is_active']:
                         await event.answer(lang_manager.get_text("user_not_active"))
                         return
                     elif user['signals_remaining'] <= 0:
-                        await event.answer(lang_manager.get_text("no_signals_remaining"))
+                        if not user['is_approved']:
+                            await event.answer(lang_manager.get_text("user_not_approved"))
+                        else:
+                            await event.answer(lang_manager.get_text("no_signals_remaining"))
                         return
 
             # Initialize request count for new users

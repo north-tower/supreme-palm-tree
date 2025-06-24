@@ -71,5 +71,14 @@
     "pair_menu_prompt": "Selecciona el marco de tiempo para analizar:",
     "menu_button_add_favorite": "☆ Añadir a favoritos",
     "menu_button_remove_favorite": "⭐ Eliminar de favoritos",
-    "menu_button_back": "🔙 Volver"
+    "menu_button_back": "🔙 Volver",
+    "help_title": "✨ *Ayuda del Bot Mystic Trader* ✨\n━━━━━━━━━━━━━━━━━━━━━━",
+    "help_general": "📱 *Comandos Generales*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`/start` - Iniciar el bot\n`/help` - Mostrar este mensaje de ayuda\n`/language` - Cambiar el idioma del bot\n`/support` - Acceder al sistema de soporte",
+    "help_admin": "👑 *Comandos de Administrador*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`/approve <user_id>` - Aprobar un usuario\n`/activate <user_id>` - Activar un usuario\n`/deactivate <user_id>` - Desactivar un usuario\n`/addadmin <user_id>` - Añadir un nuevo administrador\n`/removeadmin <user_id>` - Eliminar un administrador\n`/listadmins` - Mostrar todos los administradores\n`/pending` - Mostrar usuarios pendientes\n`/stats <user_id>` - Mostrar estadísticas de usuario",
+    "help_trading": "💹 *Comandos de Trading*\n━━━━━━━━━━━━━━━━━━━━━━\n\nSelecciona en el menú para:\n\n• Elegir activos OTC o Regulares\n• Seleccionar pares de divisas\n• Establecer marcos de tiempo de trading",
+    "help_support": "💬 *Sistema de Soporte*\n━━━━━━━━━━━━━━━━━━━━━━\n\n`/support` - Acceder al sistema de soporte\n\n• Crear nuevos tickets de soporte\n• Ver tus tickets existentes\n• Responder a mensajes de soporte\n• Cerrar o reabrir tickets",
+    "help_footer": "\n💡 *¿Necesitas más ayuda?*\nUsa `/support` para crear un ticket de soporte.",
+    "welcome_registration_prompt": "¿Aún no estás registrado? ¡Haz clic en el botón de abajo para registrarte y obtener acceso completo!",
+    "welcome_registration_button": "📝 Registrarse ahora",
+    "welcome_platform_button": "🌐 Plataforma de Trading"
 } 

@@ -136,5 +136,8 @@
     "pair_menu_prompt": "Please select an expiration time for analysis:",
     "menu_button_add_favorite": "⭐ Add to Favorites",
     "menu_button_remove_favorite": "⭐ Remove from Favorites",
-    "menu_button_back": "🔙 Back"
+    "menu_button_back": "🔙 Back",
+    "welcome_registration_prompt": "Not registered yet? Click the button below to sign up and get full access!",
+    "welcome_registration_button": "📝 Register Now",
+    "welcome_platform_button": "🌐 Trading Platform"
 } 
