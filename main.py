@@ -92,6 +92,7 @@ class TelegramBotClient:
             self.client.add_event_handler(self.handle_start_command, events.NewMessage(pattern='/start'))
             self.client.add_event_handler(self.handle_help_command, events.NewMessage(pattern='/help'))
             self.client.add_event_handler(self.handle_support_command, events.NewMessage(pattern='/support'))
+            self.client.add_event_handler(self.handle_language_command, events.NewMessage(pattern='/language'))
             self.client.add_event_handler(
                 self.handle_admin_command, 
                 events.NewMessage(pattern='/approve|/pending|/stats|/addadmin|/removeadmin|/listadmins|/tickets|/debug|/transactions')
@@ -118,83 +119,62 @@ class TelegramBotClient:
         # Add user if new
         if user_manager.add_user(user_id, username):
             user = user_manager.get_user(user_id)
+            greeting = lang_manager.get_text("welcome_greeting_new")
             if user['is_admin']:
-                welcome_msg = (
-                    "👋 *Welcome, Admin!*\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "⚠️ *Important: This is not a button for easy money! "
-                    "Remember risk management 💰 and discipline 📊*\n\n"
-                    "As an admin, you have access to additional commands and features."
-                )
+                status_msg = lang_manager.get_text("welcome_status_admin")
             elif user['is_approved']:
-                welcome_msg = (
-                    "👋 *Welcome!*\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "⚠️ *Important: This is not a button for easy money! "
-                    "Remember risk management 💰 and discipline 📊*\n\n"
-                    "Your account is approved and ready to use."
-                )
+                status_msg = lang_manager.get_text("welcome_status_approved")
             else:
-                welcome_msg = (
-                    "👋 *Welcome!*\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "⚠️ *Important: This is not a button for easy money! "
-                    "Remember risk management 💰 and discipline 📊*\n\n"
-                    "Your account is pending approval. Please wait for admin confirmation."
-                )
+                status_msg = lang_manager.get_text("welcome_status_pending")
         else:
             user = user_manager.get_user(user_id)
+            greeting = lang_manager.get_text("welcome_greeting_return")
             if user['is_admin']:
-                welcome_msg = (
-                    "👋 *Welcome back, Admin!*\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "⚠️ *Important: This is not a button for easy money! "
-                    "Remember risk management 💰 and discipline 📊*\n\n"
-                    "Ready to manage and monitor the system."
-                )
+                status_msg = lang_manager.get_text("welcome_status_back_admin")
             elif user['is_approved']:
-                welcome_msg = (
-                    "👋 *Welcome back!*\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "⚠️ *Important: This is not a button for easy money! "
-                    "Remember risk management 💰 and discipline 📊*\n\n"
-                    "Ready to continue trading."
-                )
+                status_msg = lang_manager.get_text("welcome_status_back_approved")
             else:
-                welcome_msg = (
-                    "👋 *Welcome back!*\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "⚠️ *Important: This is not a button for easy money! "
-                    "Remember risk management 💰 and discipline 📊*\n\n"
-                    "You're in trial mode. Limited signals available."
-                )
+                status_msg = lang_manager.get_text("welcome_status_back_pending")
+
+        warning_msg = lang_manager.get_text("main_menu_warning")
+        
+        welcome_msg = (
+            f"{greeting}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{warning_msg}\n\n"
+            f"{status_msg}"
+        )
 
         await self.show_main_menu(event, welcome_msg)
 
     async def show_main_menu(self, event, custom_message=None):
         """Show the main menu with all available options"""
         try:
-            default_message = (
-                "🤖 *Trading Bot Menu*\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                "⚠️ *Important: This is not a button for easy money! "
-                "Remember risk management 💰 and discipline 📊*\n\n"
-                "Select an option to begin:"
-            )
+            # Use custom message for welcome, otherwise use translatable default
+            if custom_message:
+                message = custom_message
+            else:
+                title = lang_manager.get_text("main_menu_title")
+                warning = lang_manager.get_text("main_menu_warning")
+                prompt = lang_manager.get_text("main_menu_prompt")
+                message = (
+                    f"{title}\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"{warning}\n\n"
+                    f"{prompt}"
+                )
 
-            # Use custom message if provided, otherwise use default
-            message = custom_message if custom_message else default_message
-
+            # Use translatable buttons
             buttons = [
                 [
-                    Button.inline("🌟 Regular Assets", b"asset:regular_assets"),
-                    Button.inline("💎 OTC Assets", b"asset:otc")
+                    Button.inline(lang_manager.get_text("menu_button_regular"), b"asset:regular_assets"),
+                    Button.inline(lang_manager.get_text("menu_button_otc"), b"asset:otc")
                 ],
                 [
-                    Button.inline("⭐ My Favorites", b"favorites:view")
+                    Button.inline(lang_manager.get_text("menu_button_favorites"), b"favorites:view")
                 ],
                 [
-                    Button.inline("❓ Help", b"menu:help")
+                    Button.inline(lang_manager.get_text("menu_button_help"), b"menu:help")
                 ]
             ]
 
@@ -477,6 +457,10 @@ class TelegramBotClient:
         # Show the main menu after processing
         await self.show_main_menu(response)
    
+    async def handle_language_command(self, event):
+        """Handle the /language command"""
+        await self.show_language_selection(event)
+
     async def show_language_selection(self, event):
         available_languages = {
             "en": "🇬🇧 English",
@@ -489,10 +473,15 @@ class TelegramBotClient:
         for lang_code, lang_name in available_languages.items():
             buttons.append([Button.inline(lang_name, f"lang:{lang_code}")])
         
-        message = await event.edit(
-            lang_manager.get_text("select_language"),
-            buttons=buttons
-        )
+        message_text = lang_manager.get_text("select_language")
+
+        # For new message from command
+        if isinstance(event, events.NewMessage.Event):
+            message = await event.respond(message_text, buttons=buttons)
+        # For callback query (edit existing message)
+        else:
+            message = await event.edit(message_text, buttons=buttons)
+
         await self.store_message(event.sender_id, message)
 
     async def fetch_summary_with_handling(self, asset, period, token):
@@ -792,123 +781,60 @@ Please describe your issue below:
         """Handle regular messages for support system"""
         try:
             user_id = event.sender_id
-            print(f"🔍 [SUPPORT] Received message from user {user_id}")
-            
             if user_id in self.user_states:
                 state = self.user_states[user_id]
                 print(f"🔍 [SUPPORT] User state: {state}")
-                
-                # Advanced ticket creation: waiting for description
-                if state['state'] == 'waiting_message' and 'category' in state and 'priority' in state:
-                    # Get username
+
+                # Case 1: User is sending the description for a new ticket
+                if state.get('state') == 'waiting_message' and 'category' in state and 'priority' in state:
                     username = event.sender.username
                     if not username:
                         first_name = getattr(event.sender, 'first_name', '')
                         last_name = getattr(event.sender, 'last_name', '')
                         username = f"{first_name} {last_name}".strip() or f"User_{user_id}"
-                    # Create ticket with category and priority
+
                     ticket_id = support_manager.create_ticket(
                         user_id,
                         username,
                         category=state['category'],
                         priority=state['priority']
                     )
-                    print(f"✅ [SUPPORT] Created ticket {ticket_id} for user {username} (cat={state['category']}, pri={state['priority']})")
-                    # Add first message
                     support_manager.add_message(ticket_id, user_id, event.text, is_admin=user_manager.is_admin(user_id))
-                    # Confirmation message
+                    
                     confirmation_message = (
-                        f"""
-✅ *Your support ticket has been created!*
-━━━━━━━━━━━━━━━━━━━━━━
-
-🎫 *Ticket ID:* `{ticket_id}`
-🗂️ *Category:* `{state['category'].capitalize()}`
-⚡ *Priority:* `{state['priority'].capitalize()}`
-
-Our support team will review your ticket and get back to you soon.
-"""
+                        f"✅ *Your support ticket has been created!*\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"🎫 *Ticket ID:* `{ticket_id}`\n"
+                        f"🗂️ *Category:* `{state['category'].capitalize()}`\n"
+                        f"⚡ *Priority:* `{state['priority'].capitalize()}`\n\n"
+                        f"Our support team will review your ticket and get back to you soon."
                     )
                     await event.respond(confirmation_message, parse_mode='markdown')
                     self.user_states.pop(user_id)
                     return
-                
-                if state['state'] in ['waiting_message', 'replying']:
-                    ticket_id = state.get('ticket_id')
+
+                # Case 2: User is replying to an existing ticket
+                if state.get('state') == 'replying' and 'ticket_id' in state:
+                    ticket_id = state['ticket_id']
                     message = event.text
-                    print(f"🔍 [SUPPORT] Processing message for ticket {ticket_id}")
-                    
-                    # Add message to ticket
                     is_admin = user_manager.is_admin(user_id)
+
                     if support_manager.add_message(ticket_id, user_id, message, is_admin):
-                        print(f"✅ [SUPPORT] Added message to ticket {ticket_id}")
-                        # Notify the other party
+                        await event.respond(lang_manager.get_text("support_ticket_sent"))
+                        
                         ticket = support_manager.get_ticket(ticket_id)
                         if is_admin:
-                            print(f"🔍 [SUPPORT] Sending admin reply notification")
-                            try:
-                                # Convert user_id to integer
-                                target_user_id = int(ticket['user_id'])
-                                await self.client.send_message(
-                                    target_user_id,
-                                    f"""
-💬 *Support Reply*
-━━━━━━━━━━━━━━━━━━━━━━
-
-🎫 *Ticket ID:* `{ticket_id}`
-📊 *Status:* Open
-
-👨‍💼 *Support Team:*
-{message}
-
-💡 You can reply to this message to continue the conversation.
-"""
-                                )
-                                print(f"✅ [SUPPORT] Sent notification to user {target_user_id}")
-                            except Exception as notify_error:
-                                print(f"⚠️ [ERROR] Failed to send user notification: {notify_error}")
+                            target_user_id = int(ticket['user_id'])
+                            await self.client.send_message(target_user_id, f"💬 *Support Reply on Ticket #{ticket_id}*\n\n{message}")
                         else:
-                            print(f"🔍 [SUPPORT] Sending user reply notification to admins")
-                            try:
-                                for admin_id in user_manager.get_admins():
-                                    try:
-                                        # Convert admin_id to integer
-                                        target_admin_id = int(admin_id)
-                                        await self.client.send_message(
-                                            target_admin_id,
-                                            f"""
-💬 *Support Reply*
-━━━━━━━━━━━━━━━━━━━━━━
-
-🎫 *Ticket ID:* `{ticket_id}`
-📊 *Status:* Open
-
-👨‍💼 *Support Team:*
-{message}
-
-💡 You can reply to this message to continue the conversation.
-"""
-                                        )
-                                        print(f"✅ [SUPPORT] Sent notification to admin {target_admin_id}")
-                                    except Exception as admin_notify_error:
-                                        print(f"⚠️ [ERROR] Failed to send notification to admin {admin_id}: {admin_notify_error}")
-                            except Exception as admin_list_error:
-                                print(f"⚠️ [ERROR] Failed to get admin list: {admin_list_error}")
+                            for admin_id in user_manager.get_admins():
+                                await self.client.send_message(int(admin_id), f"💬 *New Reply on Ticket #{ticket_id} from {ticket.get('username','user')}*\n\n{message}")
                         
-                        # If this was the first message (ticket creation), show success message
-                        if state['state'] == 'waiting_message':
-                            print(f"✅ [SUPPORT] Showing ticket creation success message")
-                            await event.respond(lang_manager.get_text("support_ticket_created_success").format(ticket_id=ticket_id))
-                        else:
-                            print(f"✅ [SUPPORT] Showing message sent confirmation")
-                            await event.respond(lang_manager.get_text("support_ticket_sent"))
                         self.user_states.pop(user_id)
                     else:
-                        print(f"⚠️ [SUPPORT] Failed to add message to ticket {ticket_id}")
                         await event.respond(lang_manager.get_text("support_ticket_not_found"))
-            else:
-                # User is not in any state, ignore the message
-                pass
+                    return
+
         except Exception as e:
             print(f"⚠️ [ERROR] Error in handle_message: {e}")
             print(f"📝 [DEBUG] Full error details: {str(e)}")
@@ -2408,26 +2334,27 @@ Our support team will review your ticket and get back to you soon.
         try:
             # Add favorite button to the pair menu
             is_favorite = pair in user_manager.get_favorite_pairs(event.sender_id)
+            favorite_text = lang_manager.get_text("menu_button_remove_favorite") if is_favorite else lang_manager.get_text("menu_button_add_favorite")
             favorite_button = Button.inline(
-                "⭐ Remove from Favorites" if is_favorite else "☆ Add to Favorites",
+                favorite_text,
                 f"favorites:{'remove' if is_favorite else 'add'}:{pair}"
             )
-            
+
             buttons = [
-                [Button.inline("1min", f"analyze:{pair}:1"), 
-                 Button.inline("5min", f"analyze:{pair}:5"),
-                 Button.inline("15min", f"analyze:{pair}:15")],
-                [Button.inline("30min", f"analyze:{pair}:30"),
-                 Button.inline("1h", f"analyze:{pair}:60"),
-                 Button.inline("4h", f"analyze:{pair}:240")],
+                [Button.inline("1min", f"analyze:{pair}:1"),
+                 Button.inline("3min", f"analyze:{pair}:3"),
+                 Button.inline("5min", f"analyze:{pair}:5")],
+                [Button.inline("15min", f"analyze:{pair}:15"),
+                 Button.inline("30min", f"analyze:{pair}:30"),
+                 Button.inline("1h", f"analyze:{pair}:60")],
                 [favorite_button],
-                [Button.inline("🔙 Back", b"menu:main")]
+                [Button.inline(lang_manager.get_text("menu_button_back"), b"menu:main")]
             ]
             
             message = (
                 f"📊 *{pair}*\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                "Select timeframe to analyze:"
+                f"{lang_manager.get_text('pair_menu_prompt')}"
             )
             
             await event.edit(message, buttons=buttons, parse_mode='markdown')
