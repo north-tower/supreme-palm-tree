@@ -2,10 +2,10 @@
 # Version: 2.0
 # This version includes price action, candlestick, and indicator confirmation logic
 
+FROM python:3.12-slim
+
 LABEL bot.version="2.0"
 LABEL bot.description="Enhanced with Pro Signal Logic (v2): Price Action + Indicator Confirmation"
-
-FROM python:3.12-slim
 
 WORKDIR /app
 
