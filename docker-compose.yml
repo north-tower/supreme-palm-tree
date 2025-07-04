@@ -1,9 +1,16 @@
+# docker-compose.yml for Enhanced Trading Bot (Pro Signal Logic v2)
+# Version: 2.0
+# This version includes price action, candlestick, and indicator confirmation logic
+
 version: '3.8'
 
 services:
   bot:
     build: .
     container_name: telegram-bot
+    labels:
+      - "bot.version=2.0"
+      - "bot.description=Enhanced with Pro Signal Logic (v2): Price Action + Indicator Confirmation"
     volumes:
       - ./data:/app/data
     environment:
