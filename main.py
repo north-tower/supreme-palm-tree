@@ -361,9 +361,11 @@ class TelegramBotClient:
                 signal_gen = SignalGenerator(history_data)
                 signal_info = signal_gen.generate_signal()
 
-                # Extract signal information
-                support = None
-                resistance = None
+                # Extract support and resistance from indicators if available
+                indicators = results.get('Indicators', {}) if isinstance(results, dict) else {}
+                sr = indicators.get('Support and Resistance', {})
+                support = sr.get('Support')
+                resistance = sr.get('Resistance')
                 direction = lang_manager.get_text('buy_signal')
 
                 # Check if signal_info is a string (pre-formatted message)
