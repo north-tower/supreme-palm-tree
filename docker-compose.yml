@@ -7,7 +7,7 @@ version: '3.8'
 services:
   bot:
     build: .
-    container_name: telegram-bot
+    container_name: telegram-botv2
     labels:
       - "bot.version=2.0"
       - "bot.description=Enhanced with Pro Signal Logic (v2): Price Action + Indicator Confirmation"
