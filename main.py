@@ -14,6 +14,7 @@ from user_manager import UserManager
 from support_manager import SupportManager
 import json
 from transaction_logger import TransactionLogger
+from SignalGenerator import SignalGenerator
 
 # Initialize managers
 lang_manager = LanguageManager()
@@ -32,7 +33,7 @@ class TelegramBotClient:
 
         self.api_id = "26422824"
         self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
-        self.bot_token = "8129679884:AAGEbC-P6_YFQFzERMiV2UevFx6uXAqSUhs"
+        self.bot_token = "8165397037:AAGsl_RuS4y3f-b5S1Vz3-LT2dky3IEEhxY"
         
         # Initialize with default admin
         self.default_admin_id = "1885741502"  # Replace with your Telegram ID
@@ -144,7 +145,8 @@ class TelegramBotClient:
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"{promo_msg}\n\n"
             f"{warning_msg}\n\n"
-            f"{status_msg}"
+            f"{status_msg}\n\n"
+            "<b>🤖 Enhanced with Pro Signal Logic (v2)</b>"
         )
 
         await self.show_main_menu(event, welcome_msg)
@@ -163,7 +165,8 @@ class TelegramBotClient:
                     f"{title}\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"{warning}\n\n"
-                    f"{prompt}"
+                    f"{prompt}\n\n"
+                    "<b>🤖 Enhanced with Pro Signal Logic (v2)</b>"
                 )
 
             # Use translatable buttons
@@ -355,8 +358,8 @@ class TelegramBotClient:
                 return
 
             if results and history_data:
-                history_summary = HistorySummary(history_data, time_choice)
-                signal_info = history_summary.generate_signal(selected_pair, time_choice)
+                signal_gen = SignalGenerator(history_data)
+                signal_info = signal_gen.generate_signal()
 
                 # Extract signal information
                 support = None
@@ -1860,8 +1863,8 @@ Please describe your issue below:
                         print(f"🔍 [ANALYSIS] {pair} {period}m: History data length: {len(history_data) if history_data else 0}")
                         if history_data and len(history_data) > 0:
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Sample history data: {history_data[:3]}")
-                        history_summary = HistorySummary(history_data, period)
-                        signal_info = history_summary.generate_signal(pair, period)
+                        signal_gen = SignalGenerator(history_data)
+                        signal_info = signal_gen.generate_signal()
                         if not signal_info or signal_info == "NO_SIGNAL" or "НЕТ СИГНАЛА" in str(signal_info):
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Trying fallback signal generation...")
                             direction = self.generate_fallback_signal(history_data, pair, period)
@@ -2016,8 +2019,8 @@ Please describe your issue below:
                     else:
                         score = 0
                     # Only consider strong BUY/SELL signals
-                    history_summary = HistorySummary(history_data, period)
-                    signal_info = history_summary.generate_signal(pair, period)
+                    signal_gen = SignalGenerator(history_data)
+                    signal_info = signal_gen.generate_signal()
                     direction = None
                     if isinstance(signal_info, str):
                         import re

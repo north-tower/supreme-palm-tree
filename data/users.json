@@ -5,7 +5,8 @@
         "signals_remaining": Infinity,
         "joined_date": "2025-06-15T13:37:16.719752",
         "is_active": true,
-        "username": null
+        "username": null,
+        "favorite_pairs": []
     },
     "6234721805": {
         "username": "Hypermoto",
@@ -13,7 +14,8 @@
         "is_approved": false,
         "signals_remaining": 3,
         "joined_date": "2025-06-15T13:37:45.150669",
-        "is_active": true
+        "is_active": true,
+        "favorite_pairs": []
     },
     "6187379343": {
         "username": "Wa_ngari_00",
@@ -21,7 +23,8 @@
         "is_approved": true,
         "signals_remaining": Infinity,
         "joined_date": "2025-06-15T13:47:33.340374",
-        "is_active": true
+        "is_active": true,
+        "favorite_pairs": []
     },
     "5295571920": {
         "username": "AnonymusFibo",
@@ -29,7 +32,8 @@
         "is_approved": false,
         "is_active": true,
         "signals_remaining": 1,
-        "joined_date": "2025-06-17T16:09:17.208621"
+        "joined_date": "2025-06-17T16:09:17.208621",
+        "favorite_pairs": []
     },
     "7761961558": {
         "username": null,
@@ -37,6 +41,7 @@
         "is_approved": false,
         "is_active": true,
         "signals_remaining": 3,
-        "joined_date": "2025-06-17T18:16:37.111058"
+        "joined_date": "2025-06-17T18:16:37.111058",
+        "favorite_pairs": []
     }
 }

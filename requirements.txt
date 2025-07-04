@@ -7,3 +7,4 @@ asyncio
 datetime
 websockets
 openpyxl
+pytest

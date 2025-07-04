@@ -80,5 +80,89 @@
     },
     "signal": "SELL Signal",
     "result": "plus"
+  },
+  {
+    "id": 3,
+    "user_id": 1885741502,
+    "pair": "\ud83c\uddf2\ud83c\udde6\ud83c\uddfa\ud83c\uddf8 MAD/USD OTC",
+    "expiration": 1,
+    "analysis": "\ud83d\udcca\ud83d\udd2e Your magic signal is ready for \ud83c\uddf2\ud83c\udde6\ud83c\uddfa\ud83c\uddf8 MAD/USD OTC! \ud83d\udd2e\ud83d\udcca\n\n\ud83d\udcb9 Signal: BUY Signal\n\ud83d\udcc8 Support Level: N/A \ud83d\udd3b\n\ud83d\udcc9 Resistance Level: N/A \ud83d\udd3a\n\n\u2728\ud83d\udca1 Market magic is on your side! Good luck with your trades! \u2728\n\n\ud83d\udd01 Press the button below to get a new signal! \ud83d\udd01",
+    "indicators": {
+      "RSI": 27.118644067795813,
+      "EMA": 0.1122196891855812,
+      "MACD": null,
+      "Bollinger Bands": {
+        "Upper Band": 0.11244447666108441,
+        "Lower Band": 0.1120955233389156,
+        "Middle Band": 0.11227000000000001
+      },
+      "Stochastic Oscillator": {
+        "%K": 6.249999999997832,
+        "%D": 10.85526315789568
+      },
+      "Support and Resistance": {
+        "Support": 0.11206,
+        "Resistance": 0.11238
+      },
+      "Keltner Channels": {
+        "Upper Band": NaN,
+        "Lower Band": NaN,
+        "Middle Line": 0.1122413865720732
+      },
+      "Parabolic SAR": 0.11225688183032966,
+      "Fibonacci Retracement": {
+        "0%": 0.11238,
+        "23.6%": 0.11230448,
+        "38.2%": 0.11225776,
+        "50%": 0.11222,
+        "61.8%": 0.11218224,
+        "100%": 0.11206
+      }
+    },
+    "signal": "BUY Signal",
+    "result": "pending",
+    "timestamp": "2025-07-03T19:22:38.862688"
+  },
+  {
+    "id": 4,
+    "user_id": 1885741502,
+    "pair": "\ud83c\uddec\ud83c\udde7\ud83c\uddef\ud83c\uddf5 GBP/JPY OTC",
+    "expiration": 3,
+    "analysis": "\ud83d\udcca\ud83d\udd2e Your magic signal is ready for \ud83c\uddec\ud83c\udde7\ud83c\uddef\ud83c\uddf5 GBP/JPY OTC! \ud83d\udd2e\ud83d\udcca\n\n\ud83d\udcb9 Signal: BUY Signal\n\ud83d\udcc8 Support Level: N/A \ud83d\udd3b\n\ud83d\udcc9 Resistance Level: N/A \ud83d\udd3a\n\n\u2728\ud83d\udca1 Market magic is on your side! Good luck with your trades! \u2728\n\n\ud83d\udd01 Press the button below to get a new signal! \ud83d\udd01",
+    "indicators": {
+      "RSI": 62.50000000000001,
+      "EMA": 211.45638440423917,
+      "MACD": null,
+      "Bollinger Bands": {
+        "Upper Band": 211.48252914925754,
+        "Lower Band": 211.40847085074242,
+        "Middle Band": 211.44549999999998
+      },
+      "Stochastic Oscillator": {
+        "%K": 66.66666666665087,
+        "%D": 75.5555555555345
+      },
+      "Support and Resistance": {
+        "Support": 211.425,
+        "Resistance": 211.485
+      },
+      "Keltner Channels": {
+        "Upper Band": NaN,
+        "Lower Band": NaN,
+        "Middle Line": 211.4522462967881
+      },
+      "Parabolic SAR": 211.45082697349446,
+      "Fibonacci Retracement": {
+        "0%": 211.485,
+        "23.6%": 211.47084,
+        "38.2%": 211.46208000000001,
+        "50%": 211.455,
+        "61.8%": 211.44792,
+        "100%": 211.425
+      }
+    },
+    "signal": "BUY Signal",
+    "result": "pending",
+    "timestamp": "2025-07-04T06:50:40.556472"
   }
 ]
