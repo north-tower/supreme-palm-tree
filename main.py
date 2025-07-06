@@ -358,67 +358,35 @@ class TelegramBotClient:
                 return
 
             if results and history_data:
-                signal_gen = SignalGenerator(history_data)
-                signal_info = signal_gen.generate_signal()
+                signal_gen = SignalGenerator()
+                signal_info = await signal_gen.generate_signal(asset, time_choice, fetch_function=self.fetch_summary_with_handling)
 
-                # Extract support and resistance from indicators if available
-                indicators = results.get('Indicators', {}) if isinstance(results, dict) else {}
-                sr = indicators.get('Support and Resistance', {})
-                support = sr.get('Support')
-                resistance = sr.get('Resistance')
-                direction = lang_manager.get_text('buy_signal')
+                # Debug: Print what signal_info contains
+                print(f"[DEBUG] Signal info type: {type(signal_info)}")
+                print(f"[DEBUG] Signal info content: {signal_info}")
 
-                # Check if signal_info is a string (pre-formatted message)
-                if isinstance(signal_info, str):
-                    # Extract support and resistance from the pre-formatted message
-                    import re
-                    # Updated patterns to match the Russian format with asterisks
-                    support_match = re.search(r'\*\*Уровень поддержки:\*\*\s*(\d+\.\d+)', signal_info)
-                    resistance_match = re.search(r'\*\*Уровень сопротивления:\*\*\s*(\d+\.\d+)', signal_info)
-                    direction_match = re.search(r'\*\*Сигнал:\*\*\s*🟥\s*ПРОДАТЬ|\*\*Сигнал:\*\*\s*🟩\s*КУПИТЬ', signal_info)
-                    
-                    if support_match:
-                        support = support_match.group(1)
-                    if resistance_match:
-                        resistance = resistance_match.group(1)
-                    if direction_match:
-                        if 'ПРОДАТЬ' in direction_match.group(0):
-                            direction = lang_manager.get_text('sell_signal')
-                        else:
-                            direction = lang_manager.get_text('buy_signal')
-                else:
-                    # Handle dictionary format
-                    if isinstance(signal_info, dict):
-                        if 'indicators' in signal_info:
-                            indicators = signal_info['indicators']
-                            if 'Support and Resistance' in indicators:
-                                sr_levels = indicators['Support and Resistance']
-                                if isinstance(sr_levels, dict):
-                                    support = sr_levels.get('Support')
-                                    resistance = sr_levels.get('Resistance')
-                        
-                        if 'direction' in signal_info:
-                            if signal_info['direction'] == 'SELL':
-                                direction = lang_manager.get_text('sell_signal')
-                            elif signal_info['direction'] == 'NO_SIGNAL':
-                                direction = lang_manager.get_text('no_signal')
-
-                # Format the signal response using language manager
-                signal_response = lang_manager.get_text('signal_analysis').format(
-                    pair=selected_pair,
-                    direction=direction,
-                    support=support if support is not None else 'N/A',
-                    resistance=resistance if resistance is not None else 'N/A'
-                )
-                # Record the transaction
+                # Record the transaction first
                 transaction_id = transaction_logger.add_transaction(
                     user_id=user_id,
                     pair=selected_pair,
                     expiration=time_choice,
-                    analysis=signal_response,
+                    analysis=signal_info,
                     indicators=results.get('Indicators', {}) if isinstance(results, dict) else {},
-                    signal=direction
+                    signal="BUY" if "BUY" in str(signal_info) else "SELL" if "SELL" in str(signal_info) else "HOLD"
                 )
+
+                # Directly send the formatted signal message from SignalGenerator
+                # Support/Resistance may be 'N/A' if not enough data or no clear levels found
+                feedback_msg = await response.respond(
+                    f"{signal_info}\n\n<b>After the trade closes, please let us know if it was a WIN or LOSS by pressing a button below:</b>",
+                    buttons=[
+                        [Button.inline("✅ Plus", f"trade_result:{transaction_id}:plus")],
+                        [Button.inline("❌ Minus", f"trade_result:{transaction_id}:minus")]
+                    ],
+                    parse_mode='html'
+                )
+                await self.store_message(response.sender_id, feedback_msg)
+                # Remove old code that parses or reformats signal_info
                 # Generate the chart
                 chart_plotter = TradingChartPlotter(history_data, selected_pair, time_mapping[time_choice])
                 chart_image = chart_plotter.plot_trading_chart()
@@ -432,25 +400,15 @@ class TelegramBotClient:
                         force_document=False
                     )
                     await self.store_message(response.sender_id, chart_msg)
-                    # Send signal with feedback buttons
-                    feedback_msg = await response.respond(
-                        f"{signal_response}\n\n<b>After the trade closes, please let us know if it was a WIN or LOSS by pressing a button below:</b>",
-                        buttons=[
-                            [Button.inline("✅ Plus", f"trade_result:{transaction_id}:plus")],
-                            [Button.inline("❌ Minus", f"trade_result:{transaction_id}:minus")]
-                        ],
-                        parse_mode='html'
-                    )
-                    await self.store_message(response.sender_id, feedback_msg)
                     os.remove(temp_file_path)
                 else:
                     error_msg = await response.respond(lang_manager.get_text("failed_to_generate_chart"))
                     await self.store_message(response.sender_id, error_msg)
                     feedback_msg = await response.respond(
-                        signal_response,
+                        signal_info,
                         buttons=[
-                            [Button.inline("✅ Plus", f"trade_result:{transaction_id}:plus")],
-                            [Button.inline("❌ Minus", f"trade_result:{transaction_id}:minus")]
+                            [Button.inline("✅ Plus", f"trade_result:{{transaction_id}}:plus")],
+                            [Button.inline("❌ Minus", f"trade_result:{{transaction_id}}:minus")]
                         ]
                     )
                     await self.store_message(response.sender_id, feedback_msg)
@@ -1865,8 +1823,8 @@ Please describe your issue below:
                         print(f"🔍 [ANALYSIS] {pair} {period}m: History data length: {len(history_data) if history_data else 0}")
                         if history_data and len(history_data) > 0:
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Sample history data: {history_data[:3]}")
-                        signal_gen = SignalGenerator(history_data)
-                        signal_info = signal_gen.generate_signal()
+                        signal_gen = SignalGenerator()
+                        signal_info = await signal_gen.generate_signal(asset, period, fetch_function=self.fetch_summary_with_handling)
                         if not signal_info or signal_info == "NO_SIGNAL" or "НЕТ СИГНАЛА" in str(signal_info):
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Trying fallback signal generation...")
                             direction = self.generate_fallback_signal(history_data, pair, period)
@@ -2021,8 +1979,8 @@ Please describe your issue below:
                     else:
                         score = 0
                     # Only consider strong BUY/SELL signals
-                    signal_gen = SignalGenerator(history_data)
-                    signal_info = signal_gen.generate_signal()
+                    signal_gen = SignalGenerator()
+                    signal_info = await signal_gen.generate_signal(asset, period, fetch_function=self.fetch_summary_with_handling)
                     direction = None
                     if isinstance(signal_info, str):
                         import re

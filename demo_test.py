@@ -34,27 +34,74 @@ async def fetch_summary(asset, period, token):
             await websocket.send(f"42{json.dumps(auth_message)}")
             
             # Wait for authentication
+            auth_timeout = 10  # seconds
+            auth_start_time = asyncio.get_event_loop().time()
+            
             while True:
-                response = await websocket.recv()
-                if isinstance(response, bytes):
-                    response = response.decode('utf-8')
-                print(f"📥 [ИНФО] Auth response: {response}")
-                
-                if "successauth" in response.lower():
-                    print("✅ [ИНФО] Authentication successful!")
+                try:
+                    response = await asyncio.wait_for(websocket.recv(), timeout=2)
+                    if isinstance(response, bytes):
+                        response = response.decode('utf-8')
+                    print(f"📥 [ИНФО] Auth response: {response}")
+                    
+                    # Handle ping messages during auth
+                    if response.startswith("2"):
+                        await websocket.send("3")
+                        continue
+                    
+                    if "successauth" in response.lower():
+                        print("✅ [ИНФО] Authentication successful!")
+                        break
+                    elif "error" in response.lower():
+                        print("⚠️ [ОШИБКА] Authentication failed!")
+                        return None, None
+                    
+                    # Check timeout
+                    if (asyncio.get_event_loop().time() - auth_start_time) > auth_timeout:
+                        print("⚠️ [ОШИБКА] Authentication timeout - proceeding anyway")
+                        break
+                        
+                except asyncio.TimeoutError:
+                    print("⚠️ [ОШИБКА] Authentication timeout - proceeding anyway")
                     break
-                elif "error" in response.lower():
-                    print("⚠️ [ОШИБКА] Authentication failed!")
-                    return None, None
 
             # Change symbol
             print(f"🔄 [ИНФО] Changing symbol to {asset}")
             symbol_message = ["changeSymbol", {"asset": asset, "period": 1}]
             await websocket.send(f"42{json.dumps(symbol_message)}")
             
+            # Wait for symbol change confirmation
+            symbol_timeout = 5  # seconds
+            symbol_start_time = asyncio.get_event_loop().time()
+            
+            while True:
+                try:
+                    response = await asyncio.wait_for(websocket.recv(), timeout=1)
+                    if isinstance(response, bytes):
+                        response = response.decode('utf-8')
+                    
+                    # Handle ping messages
+                    if response.startswith("2"):
+                        await websocket.send("3")
+                        continue
+                    
+                    # Check for symbol change success or any data
+                    if response.startswith("[") or "history" in response.lower():
+                        print("✅ [ИНФО] Symbol change successful or data received")
+                        break
+                    
+                    # Check timeout
+                    if (asyncio.get_event_loop().time() - symbol_start_time) > symbol_timeout:
+                        print("⚠️ [ОШИБКА] Symbol change timeout - proceeding anyway")
+                        break
+                        
+                except asyncio.TimeoutError:
+                    print("⚠️ [ОШИБКА] Symbol change timeout - proceeding anyway")
+                    break
+
             # Wait for history data and collect it
             history_data = []
-            data_collection_timeout = 10  # seconds to collect data
+            data_collection_timeout = 15  # increased timeout for regular assets
             start_time = asyncio.get_event_loop().time()
             
             while True:
@@ -68,28 +115,42 @@ async def fetch_summary(asset, period, token):
                         await websocket.send("3")
                         continue
                     
-                    # Handle data messages
-                    if response.startswith("["):
+                    # Handle data messages - more flexible parsing
+                    if response.startswith("[") or response.startswith("{"):
                         try:
                             data = json.loads(response)
+                            
+                            # Handle array format: [["AUDJPY", timestamp, price], ...]
                             if isinstance(data, list) and len(data) > 0:
-                                # Check if this is a price data point (should have 3 elements: symbol, timestamp, price)
-                                if len(data[0]) == 3 and isinstance(data[0][0], str) and isinstance(data[0][1], (int, float)) and isinstance(data[0][2], (int, float)):
-                                    # Only collect data for our target asset
-                                    if data[0][0] == asset:
-                                        history_data.append(data[0])
-                                        print(f"📥 [ИНФО] Received data point for {asset}: {data[0]}")
+                                for item in data:
+                                    if isinstance(item, list) and len(item) >= 3:
+                                        if item[0] == asset:
+                                            history_data.append(item)
+                                            print(f"📥 [ИНФО] Received data point for {asset}: {item}")
+                            
+                            # Handle object format: {"history": [[timestamp, price], ...]}
+                            elif isinstance(data, dict) and "history" in data:
+                                history_list = data["history"]
+                                if isinstance(history_list, list):
+                                    for i, item in enumerate(history_list):
+                                        if isinstance(item, list) and len(item) >= 2:
+                                            # Add asset name if not present
+                                            if len(item) == 2:
+                                                item = [asset, item[0], item[1]]
+                                            history_data.append(item)
+                                            print(f"📥 [ИНФО] Received history point for {asset}: {item}")
+                                            
                         except json.JSONDecodeError:
                             continue
                     
                     # Check if we've collected enough data or timeout
-                    if len(history_data) >= 100 or (asyncio.get_event_loop().time() - start_time) > data_collection_timeout:
+                    if len(history_data) >= 50 or (asyncio.get_event_loop().time() - start_time) > data_collection_timeout:
                         print(f"✅ [ИНФО] Collected {len(history_data)} data points")
                         break
                         
                 except asyncio.TimeoutError:
                     # Check if we've collected enough data
-                    if len(history_data) >= 100:
+                    if len(history_data) >= 10:  # Lower threshold for regular assets
                         print(f"✅ [ИНФО] Collected {len(history_data)} data points")
                         break
                     continue
@@ -121,8 +182,8 @@ async def main():
 
     # Call the fetch_summary function to get the results
     results, history_data = await fetch_summary(asset, period, token)
-    signal_gen = SignalGenerator(history_data)
-    signal = signal_gen.generate_signal()
+    signal_gen = SignalGenerator()
+    signal = await signal_gen.generate_signal(asset, period)
 
     print("Generated Signal:", signal)
     print(results)

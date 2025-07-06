@@ -63,7 +63,18 @@ class HistorySummary:
                 }
             except Exception as e:
                 print(f"Error getting summary: {e}")
-                return None
+                return {
+                    "Open": None,
+                    "High": None,
+                    "Low": None,
+                    "Close": None,
+                    "Volume": 0,
+                    "Start Time": None,
+                    "End Time": None,
+                    "Top Value Time": None,
+                    "Bottom Value Time": None,
+                    "error": str(e)
+                }
 
     def calculate_rsi(self, periods=14):
         try:
@@ -71,6 +82,13 @@ class HistorySummary:
 
             if self.history_df.empty or len(self.history_df) < periods:
                 return None
+
+            # Check if all prices are the same (flat market)
+            unique_prices = self.history_df["Value"].unique()
+            if len(unique_prices) == 1:
+                # Flat market - return neutral RSI (50)
+                print(f"[DEBUG] Flat market detected - returning neutral RSI (50)")
+                return 50.0
 
             self.history_df["Change"] = self.history_df["Value"].diff()
             self.history_df["Gain"] = self.history_df["Change"].apply(lambda x: x if x > 0 else 0)
@@ -87,7 +105,7 @@ class HistorySummary:
             return self.history_df["RSI"].iloc[-1] if not self.history_df["RSI"].isnull().all() else None
         except Exception as e:
             print(f"Error calculating RSI: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_ema(self, span):
         try:
@@ -100,7 +118,7 @@ class HistorySummary:
             return self.history_df["EMA"].iloc[-1] if not self.history_df["EMA"].isnull().all() else None
         except Exception as e:
             print(f"Error calculating EMA: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_bullish_bearish_strength(self):
         try:
@@ -121,7 +139,7 @@ class HistorySummary:
             return round(strength, 2)  # Round to two decimal places
         except Exception as e:
             print(f"Error calculating Bullish/Bearish Strength: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_macd(self, short_span=12, long_span=26, signal_span=9):
         try:
@@ -145,7 +163,7 @@ class HistorySummary:
             }
         except Exception as e:
             print(f"Error calculating MACD: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_bollinger_bands(self, periods=20, k=2):
         try:
@@ -167,7 +185,7 @@ class HistorySummary:
             }
         except Exception as e:
             print(f"Error calculating Bollinger Bands: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_stochastic_oscillator(self, periods=14):
         try:
@@ -190,7 +208,7 @@ class HistorySummary:
             }
         except Exception as e:
             print(f"Error calculating Stochastic Oscillator: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_support_resistance(self):
         try:
@@ -199,8 +217,25 @@ class HistorySummary:
             if self.history_df.empty:
                 return None
 
-            support = self.history_df["Value"][self.history_df["Value"] < self.history_df["Value"].shift(1)].min()
-            resistance = self.history_df["Value"][self.history_df["Value"] > self.history_df["Value"].shift(1)].max()
+            # Check if all prices are the same (flat market)
+            unique_prices = self.history_df["Value"].unique()
+            if len(unique_prices) == 1:
+                # Flat market - create artificial levels around the current price
+                current_price = unique_prices[0]
+                price_range = current_price * 0.001  # 0.1% range
+                support = current_price - price_range
+                resistance = current_price + price_range
+                print(f"[DEBUG] Flat market detected - creating artificial levels around {current_price}")
+            else:
+                # Normal market with price variation
+                support = self.history_df["Value"][self.history_df["Value"] < self.history_df["Value"].shift(1)].min()
+                resistance = self.history_df["Value"][self.history_df["Value"] > self.history_df["Value"].shift(1)].max()
+                
+                # If no support/resistance found, use min/max of the data
+                if pd.isna(support):
+                    support = self.history_df["Value"].min()
+                if pd.isna(resistance):
+                    resistance = self.history_df["Value"].max()
 
             return {
                 "Support": support,
@@ -208,7 +243,7 @@ class HistorySummary:
             }
         except Exception as e:
             print(f"Error calculating Support and Resistance: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_keltner_channels(self, periods=20, multiplier=2):
         try:
@@ -231,7 +266,7 @@ class HistorySummary:
             }
         except Exception as e:
             print(f"Error calculating Keltner Channels: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_parabolic_sar(self, af_start=0.02, af_increment=0.02, af_max=0.2):
         try:
@@ -274,7 +309,7 @@ class HistorySummary:
             return psar[-1]
         except Exception as e:
             print(f"Error calculating Parabolic SAR: {e}")
-            return None
+            return {"error": str(e)}
 
     def calculate_fibonacci_retracement(self):
         try:
@@ -299,7 +334,7 @@ class HistorySummary:
             return retracements
         except Exception as e:
             print(f"Error calculating Fibonacci Retracement: {e}")
-            return None
+            return {"error": str(e)}
 
     def get_all_indicators(self):
         try:
@@ -323,7 +358,7 @@ class HistorySummary:
             }
         except Exception as e:
             print(f"Error getting all indicators: {e}")
-            return None
+            return {"Summary": {"error": str(e)}, "Indicators": {"error": str(e)}}
         
     def generate_signal(self, currency_pair, expiration_time):
         try:
@@ -425,7 +460,7 @@ class HistorySummary:
 
         except Exception as e:
             print(f"[ERROR] Critical error in generate_signal: {e}")
-            return "❌ НЕТ СИГНАЛА - Ошибка обработки данных"
+            return {"error": str(e)}
 
 
 
