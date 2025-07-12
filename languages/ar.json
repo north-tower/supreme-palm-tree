@@ -82,5 +82,14 @@
     "welcome_promo": "🚀 هل أنت مستعد لبدء التداول؟ <a href='https://u3.shortink.io/register?utm_campaign=793672&utm_source=affiliate&utm_medium=sr&a=lmgXB42ApLv7xW&ac=fiver&code=YDR181'>سجل هنا</a> لتبدأ مع منصتنا!",
     "user_stats": "<b>📊 إحصائيات المستخدم</b>\n\n👤 <b>اسم المستخدم:</b> {username}\n📝 <b>الحالة:</b> {status}\n📈 <b>الإشارات المتبقية:</b> {signals}\n📅 <b>انضم في:</b> {joined}",
     "admin_list": "<b>👑 قائمة المسؤولين</b>\n\n{admins}",
-    "pending_users": "<b>⏳ المستخدمون المعلقون</b>\n\n{users}"
+    "pending_users": "<b>⏳ المستخدمون المعلقون</b>\n\n{users}",
+    "order_block": "كتلة الطلبات",
+    "bos_confirmed": "تم تأكيد BOS عند",
+    "signal": "الإشارة",
+    "entry_price": "سعر الدخول",
+    "expiration": "الانتهاء",
+    "mode": "الوضع",
+    "smc_analysis": "تحليل SMC",
+    "minute": "دقيقة",
+    "minutes": "دقائق"
 } 

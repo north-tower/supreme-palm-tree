@@ -142,5 +142,14 @@
     "trade_result_minus": "❌ LOSS",
     "trade_feedback_thanks": "Thank you! Your feedback has been recorded.",
     "signals": "Signals Remaining: {signals}",
-    "joined": "Joined: {joined}"
+    "joined": "Joined: {joined}",
+    "order_block": "Order Block",
+    "bos_confirmed": "BOS Confirmed at",
+    "signal": "Signal",
+    "entry_price": "Entry Price",
+    "expiration": "Expiration",
+    "mode": "Mode",
+    "smc_analysis": "SMC Analysis",
+    "minute": "minute",
+    "minutes": "minutes"
 } 

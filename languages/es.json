@@ -63,5 +63,14 @@
   "welcome_promo": "🚀 ¿Listo para empezar a operar? <a href='https://u3.shortink.io/register?utm_campaign=793672&utm_source=affiliate&utm_medium=sr&a=lmgXB42ApLv7xW&ac=fiver&code=YDR181'>Regístrese aquí</a> para empezar a utilizar nuestra plataforma!",
   "user_stats": "<b>📊 Estadísticas del Usuario</b>\n\n👤 <b>Nombre de usuario:</b> {username}\n📝 <b>Estado:</b> {status}\n📈 <b>Señales Restantes:</b> {signals}\n📅 <b>Se unió:</b> {joined}",
   "admin_list": "<b>👑 Lista de Administradores</b>\n\n{admins}",
-  "pending_users": "<b>⏳ Usuarios Pendientes</b>\n\n{users}"
+  "pending_users": "<b>⏳ Usuarios Pendientes</b>\n\n{users}",
+  "order_block": "Bloque de Órdenes",
+  "bos_confirmed": "BOS Confirmado en",
+  "signal": "Señal",
+  "entry_price": "Precio de Entrada",
+  "expiration": "Expiración",
+  "mode": "Modo",
+  "smc_analysis": "Análisis SMC",
+  "minute": "minuto",
+  "minutes": "minutos"
 } 
