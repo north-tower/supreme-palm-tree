@@ -30,6 +30,7 @@ class TelegramBotClient:
         self.user_messages = {}
         self.user_request_count = {}
         self.user_states = {}  # Store user states for support system
+        self.user_modes = {}  # user_id -> 'standard' or 'smc'
 
         self.api_id = "26422824"
         self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
@@ -106,6 +107,7 @@ class TelegramBotClient:
             # Add handler for regular messages
             self.client.add_event_handler(self.handle_message, events.NewMessage)
             self.client.add_event_handler(self.handle_trade_result_callback, events.CallbackQuery(pattern='^trade_result:'))
+            self.client.add_event_handler(self.handle_mode_toggle, events.CallbackQuery(pattern='^mode:'))
 
             print("✅ [INFO] All event handlers registered successfully")
             await self.client.run_until_disconnected()
@@ -154,6 +156,12 @@ class TelegramBotClient:
     async def show_main_menu(self, event, custom_message=None):
         """Show the main menu with all available options"""
         try:
+            user_id = event.sender_id if hasattr(event, 'sender_id') else None
+            mode = self.user_modes.get(user_id, 'standard')
+            mode_button = Button.inline(
+                "🧠 SMC Mode: ON" if mode == "smc" else "⚡ Standard Mode: ON",
+                b"mode:smc" if mode != "smc" else b"mode:standard"
+            )
             # Use custom message for welcome, otherwise use translatable default
             if custom_message:
                 message = custom_message
@@ -181,7 +189,8 @@ class TelegramBotClient:
                 [
                     Button.inline(lang_manager.get_text("menu_button_help"), b"menu:help"),
                     Button.inline(lang_manager.get_text("menu_button_language"), b"menu:language")
-                ]
+                ],
+                [mode_button]
             ]
 
             # For new message
@@ -197,6 +206,9 @@ class TelegramBotClient:
     async def handle_asset_selection(self, event):
         try:
             data = event.data.decode('utf-8')
+            # Ignore mode toggle callbacks (handled elsewhere)
+            if data.startswith('mode:'):
+                return
             # Ignore support callbacks (handled elsewhere)
             if data.startswith('support:'):
                 return
@@ -2365,6 +2377,18 @@ Please describe your issue below:
         except Exception as e:
             print(f"⚠️ [ERROR] Error in show_favorites_menu: {e}")
             await event.answer("❌ Failed to show favorites menu")
+
+    async def handle_mode_toggle(self, event):
+        user_id = event.sender_id
+        data = event.data.decode('utf-8')
+        if data == "mode:smc":
+            self.user_modes[user_id] = "smc"
+            await event.respond("🧠 SMC Mode enabled! All signals will use Smart Money Concepts logic.")
+        elif data == "mode:standard":
+            self.user_modes[user_id] = "standard"
+            await event.respond("⚡ Standard Mode enabled! All signals will use retail TA logic.")
+        # Refresh the main menu to reflect the new mode
+        await self.show_main_menu(event)
 
 if __name__ == "__main__":
     bot_client = TelegramBotClient()

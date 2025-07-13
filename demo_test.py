@@ -63,7 +63,6 @@ async def fetch_summary(asset, period, token):
                         print("⚠️ [WARNING] Authentication timeout - proceeding anyway")
                         auth_success = True
                         break
-                        
                 except asyncio.TimeoutError:
                     print("⚠️ [WARNING] Authentication timeout - proceeding anyway")
                     auth_success = True
@@ -108,7 +107,6 @@ async def fetch_summary(asset, period, token):
                         print("⚠️ [WARNING] Symbol change timeout - proceeding anyway")
                         symbol_success = True
                         break
-                        
                 except asyncio.TimeoutError:
                     print("⚠️ [WARNING] Symbol change timeout - proceeding anyway")
                     symbol_success = True
@@ -120,7 +118,7 @@ async def fetch_summary(asset, period, token):
             if not symbol_success:
                 print("⚠️ [ERROR] Symbol change failed")
                 return None, None
-
+            
             # Wait for history data and collect it
             history_data = []
             data_collection_timeout = 20  # increased timeout
@@ -161,7 +159,6 @@ async def fetch_summary(asset, period, token):
                                                 item = [asset, item[0], item[1]]
                                             history_data.append(item)
                                             print(f"📥 [INFO] Received history point for {asset}: {item}")
-                                            
                         except json.JSONDecodeError:
                             continue
                     
@@ -169,7 +166,7 @@ async def fetch_summary(asset, period, token):
                     if len(history_data) >= 50 or (asyncio.get_event_loop().time() - start_time) > data_collection_timeout:
                         print(f"✅ [INFO] Collected {len(history_data)} data points")
                         break
-                        
+                
                 except asyncio.TimeoutError:
                     # Check if we've collected enough data
                     if len(history_data) >= 10:  # Lower threshold for regular assets

@@ -190,10 +190,10 @@ class SignalGenerator:
             print(f"[ERROR] Error formatting signal: {e}")
             return f"❌ Error formatting signal: {e}"
     
-    async def generate_signal(self, asset, expiration_time_minutes, fetch_function=None, lang_manager=None):
-        """Complete signal generation with proper timeframe selection and analysis"""
+    async def generate_signal(self, asset, expiration_time_minutes, fetch_function=None, lang_manager=None, mode='standard'):
+        """Complete signal generation with proper timeframe selection and analysis. Mode can be 'standard' or 'smc'."""
         try:
-            print(f"[INFO] Generating signal for {asset} with {expiration_time_minutes} minute expiration")
+            print(f"[INFO] Generating signal for {asset} with {expiration_time_minutes} minute expiration (mode={mode})")
             
             # Step 1: Choose correct timeframe
             timeframe = self.get_timeframe_for_expiration(expiration_time_minutes)
@@ -225,6 +225,12 @@ class SignalGenerator:
                 print(f"[WARNING] Insufficient history data for {asset}")
                 return self.format_smc_signal("HOLD", asset, 0, None, None, expiration_time_minutes, lang_manager=lang_manager)
             
+            # SMC Mode: Use pure SMC logic if requested
+            if mode == 'smc':
+                print(f"[INFO] Running pure SMC logic for {asset}")
+                return self.generate_smc_pure_signal(asset, history_data, expiration_time_minutes, lang_manager)
+            
+            # --- Standard (retail TA + SMC hybrid) logic below ---
             # Step 3: Validate current price
             current_price = history_data[-1][1] if history_data else 0  # Value column
             print(f"[DEBUG] Current price extracted: {current_price}")
@@ -790,3 +796,114 @@ class SignalGenerator:
                 f"⏳ Expiration: {expiration_min} minute{'s' if expiration_min != 1 else ''}\n"
                 f"🧠 Mode: SMC Analysis"
             )
+
+    def generate_smc_pure_signal(self, asset, history_data, expiration_time_minutes, lang_manager=None):
+        """Pure SMC logic: swing labeling, strict BOS, order block, confirmation. Returns formatted SMC signal."""
+        import pandas as pd
+        print(f"[SMC] [DEBUG] Running pure SMC logic for {asset}")
+        if not history_data or len(history_data) < 20:
+            print(f"[SMC] [WARNING] Not enough data for SMC analysis")
+            return self.format_smc_signal("HOLD", asset, 0, None, None, expiration_time_minutes, lang_manager=lang_manager)
+
+        # Convert to DataFrame for easier processing
+        df = pd.DataFrame(history_data, columns=["Timestamp", "Value"])
+        prices = df["Value"].values
+        timestamps = df["Timestamp"].values
+        current_price = prices[-1]
+
+        # --- 1. Find swing highs/lows ---
+        swing_points = []  # List of dicts: {index, price, type}
+        lookback = 3
+        for i in range(lookback, len(prices) - lookback):
+            window = prices[i-lookback:i+lookback+1]
+            if prices[i] == max(window):
+                swing_points.append({"index": i, "price": prices[i], "type": "high"})
+            elif prices[i] == min(window):
+                swing_points.append({"index": i, "price": prices[i], "type": "low"})
+
+        # --- 2. Label swing points (HH, LL, HL, LH) ---
+        labeled_swings = []
+        for idx, pt in enumerate(swing_points):
+            if pt["type"] == "high":
+                # Compare to previous high
+                prev_highs = [p for p in swing_points[:idx] if p["type"] == "high"]
+                if prev_highs:
+                    label = "HH" if pt["price"] > prev_highs[-1]["price"] else "LH"
+                else:
+                    label = "HH"
+            else:
+                prev_lows = [p for p in swing_points[:idx] if p["type"] == "low"]
+                if prev_lows:
+                    label = "LL" if pt["price"] < prev_lows[-1]["price"] else "HL"
+                else:
+                    label = "LL"
+            labeled_swings.append({**pt, "label": label})
+
+        # --- 3. Detect strict BOS ---
+        bos_type = None
+        bos_price = None
+        bos_index = None
+        # Look for the most recent BOS
+        for idx in range(len(labeled_swings)-1, 0, -1):
+            pt = labeled_swings[idx]
+            if pt["label"] == "HH" and current_price > pt["price"]:
+                bos_type = "bullish"
+                bos_price = pt["price"]
+                bos_index = pt["index"]
+                break
+            elif pt["label"] == "LL" and current_price < pt["price"]:
+                bos_type = "bearish"
+                bos_price = pt["price"]
+                bos_index = pt["index"]
+                break
+
+        if not bos_type:
+            print(f"[SMC] [INFO] No BOS detected")
+            return self.format_smc_signal("HOLD", asset, current_price, None, None, expiration_time_minutes, lang_manager=lang_manager)
+
+        # --- 4. Find order block (last opposite candle before BOS) ---
+        order_block = None
+        if bos_type == "bullish":
+            # Find last bearish candle before BOS
+            for i in range(bos_index-1, 0, -1):
+                if prices[i] < prices[i-1]:  # Bearish candle
+                    order_block = {"index": i, "price": prices[i], "type": "bullish_ob"}
+                    break
+        elif bos_type == "bearish":
+            # Find last bullish candle before BOS
+            for i in range(bos_index-1, 0, -1):
+                if prices[i] > prices[i-1]:  # Bullish candle
+                    order_block = {"index": i, "price": prices[i], "type": "bearish_ob"}
+                    break
+
+        if not order_block:
+            print(f"[SMC] [INFO] No order block found")
+            return self.format_smc_signal("HOLD", asset, current_price, None, bos_price, expiration_time_minutes, lang_manager=lang_manager)
+
+        # --- 5. Wait for price to return to OB ---
+        tolerance = 0.0015  # 0.15%
+        ob_price = order_block["price"]
+        price_in_ob = abs(current_price - ob_price) / ob_price <= tolerance
+        if not price_in_ob:
+            print(f"[SMC] [INFO] Price not in order block area (current: {current_price}, OB: {ob_price})")
+            return self.format_smc_signal("HOLD", asset, current_price, ob_price, bos_price, expiration_time_minutes, lang_manager=lang_manager)
+
+        # --- 6. Confirmation (engulfing or RSI) ---
+        # Simple confirmation: check if last candle is engulfing or RSI is in the right zone
+        # For now, use price momentum as a proxy for engulfing
+        confirmation = False
+        if len(prices) >= 3:
+            if bos_type == "bullish" and prices[-1] > prices[-2] > prices[-3]:
+                confirmation = True
+            elif bos_type == "bearish" and prices[-1] < prices[-2] < prices[-3]:
+                confirmation = True
+        # Optionally, add RSI confirmation if you have indicator data
+        # (for now, skip RSI for pure SMC)
+
+        if confirmation:
+            signal_type = "BUY" if bos_type == "bullish" else "SELL"
+            print(f"[SMC] [INFO] SMC {signal_type} signal confirmed!")
+            return self.format_smc_signal(signal_type, asset, current_price, ob_price, bos_price, expiration_time_minutes, lang_manager=lang_manager)
+        else:
+            print(f"[SMC] [INFO] No confirmation for SMC signal")
+            return self.format_smc_signal("HOLD", asset, current_price, ob_price, bos_price, expiration_time_minutes, lang_manager=lang_manager)
