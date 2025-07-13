@@ -327,58 +327,42 @@ class SignalGenerator:
                                             smc_signal["bos_price"], expiration_time_minutes, lang_manager=lang_manager)
             
             # Step 12: Traditional TA Signal conditions (more flexible)
-            # Check if this is a flat market
             unique_prices = set(history_df["Value"].unique())
             is_flat_market = len(unique_prices) == 1
-            
             if is_flat_market:
                 print(f"[DEBUG] Flat market detected - using flexible conditions")
-                # For flat markets, use more flexible conditions
-                threshold = 1  # Only need 1 out of 4 conditions (very flexible)
-                buy_rsi_condition = rsi is not None and rsi < 70  # Very flexible RSI
-                sell_rsi_condition = rsi is not None and rsi > 30  # Very flexible RSI
+                threshold = 1
+                buy_rsi_condition = rsi is not None and rsi < 75  # More flexible for BUY
+                sell_rsi_condition = rsi is not None and rsi > 25
             else:
-                # Normal market conditions - more flexible
-                threshold = 2  # Need 2 out of 4 conditions (more flexible)
-                buy_rsi_condition = rsi is not None and rsi < 50  # More flexible RSI
-                sell_rsi_condition = rsi is not None and rsi > 50  # More flexible RSI
-            
-            # BUY Signal conditions
+                threshold = 2
+                buy_rsi_condition = rsi is not None and rsi < 55  # More flexible for BUY
+                sell_rsi_condition = rsi is not None and rsi > 55
             buy_conditions = [
-                self.is_support_zone(current_price, support_levels),
-                structure in ["bullish", "neutral"],  # Allow neutral structure
+                self.is_support_zone(current_price, support_levels, tolerance=0.003),  # Slightly more tolerant
+                structure in ["bullish", "neutral"],
                 pattern in ["bullish_engulfing", "pin_bar"],
                 buy_rsi_condition
             ]
             buy_score = sum(buy_conditions)
-            
-            # SELL Signal conditions
             sell_conditions = [
-                self.is_resistance_zone(current_price, resistance_levels),
-                structure in ["bearish", "neutral"],  # Allow neutral structure
+                self.is_resistance_zone(current_price, resistance_levels, tolerance=0.002),
+                structure in ["bearish", "neutral"],
                 pattern in ["bearish_engulfing", "pin_bar"],
                 sell_rsi_condition
             ]
             sell_score = sum(sell_conditions)
-            
             print(f"[DEBUG] Traditional TA Signal scores - BUY: {buy_score}/{threshold}, SELL: {sell_score}/{threshold}")
             print(f"[DEBUG] Buy conditions: {buy_conditions}")
             print(f"[DEBUG] Sell conditions: {sell_conditions}")
-            
-            # Generate signals based on scores
             if buy_score >= threshold:
                 zone_price = support_levels[0] if support_levels else None
                 print(f"[DEBUG] BUY signal generated (score: {buy_score}/{threshold})")
-                # Force SMC format for traditional TA signals
-                return self.format_smc_signal("BUY", asset, current_price, zone_price, 
-                                            zone_price, expiration_time_minutes, lang_manager=lang_manager)  # Use zone_price as BOS price
-            
+                return self.format_smc_signal("BUY", asset, current_price, zone_price, zone_price, expiration_time_minutes, lang_manager=lang_manager)
             elif sell_score >= threshold:
                 zone_price = resistance_levels[0] if resistance_levels else None
                 print(f"[DEBUG] SELL signal generated (score: {sell_score}/{threshold})")
-                # Force SMC format for traditional TA signals
-                return self.format_smc_signal("SELL", asset, current_price, zone_price, 
-                                            zone_price, expiration_time_minutes, lang_manager=lang_manager)  # Use zone_price as BOS price
+                return self.format_smc_signal("SELL", asset, current_price, zone_price, zone_price, expiration_time_minutes, lang_manager=lang_manager)
             
             # Final fallback: Generate signal based on RSI only if no other conditions met
             print(f"[DEBUG] No traditional TA signal - trying RSI-only fallback")
@@ -880,26 +864,24 @@ class SignalGenerator:
             print(f"[SMC] [INFO] No order block found")
             return self.format_smc_signal("HOLD", asset, current_price, None, bos_price, expiration_time_minutes, lang_manager=lang_manager)
 
-        # --- 5. Wait for price to return to OB ---
-        tolerance = 0.0015  # 0.15%
+        # --- 5. Wait for price to return to OB (increase tolerance) ---
+        tolerance = 0.003  # Increased to 0.3%
         ob_price = order_block["price"]
         price_in_ob = abs(current_price - ob_price) / ob_price <= tolerance
         if not price_in_ob:
             print(f"[SMC] [INFO] Price not in order block area (current: {current_price}, OB: {ob_price})")
             return self.format_smc_signal("HOLD", asset, current_price, ob_price, bos_price, expiration_time_minutes, lang_manager=lang_manager)
 
-        # --- 6. Confirmation (engulfing or RSI) ---
-        # Simple confirmation: check if last candle is engulfing or RSI is in the right zone
-        # For now, use price momentum as a proxy for engulfing
+        # --- 6. Relaxed confirmation for bullish SMC ---
         confirmation = False
         if len(prices) >= 3:
-            if bos_type == "bullish" and prices[-1] > prices[-2] > prices[-3]:
-                confirmation = True
-            elif bos_type == "bearish" and prices[-1] < prices[-2] < prices[-3]:
-                confirmation = True
-        # Optionally, add RSI confirmation if you have indicator data
-        # (for now, skip RSI for pure SMC)
-
+            if bos_type == "bullish":
+                # Relaxed: allow upward momentum or a single bullish candle
+                if prices[-1] > prices[-2] or prices[-1] > prices[-3]:
+                    confirmation = True
+            elif bos_type == "bearish":
+                if prices[-1] < prices[-2] and prices[-2] < prices[-3]:
+                    confirmation = True
         if confirmation:
             signal_type = "BUY" if bos_type == "bullish" else "SELL"
             print(f"[SMC] [INFO] SMC {signal_type} signal confirmed!")
