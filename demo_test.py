@@ -43,26 +43,26 @@ async def fetch_summary(asset, period, token):
                     response = await asyncio.wait_for(websocket.recv(), timeout=3)
                     if isinstance(response, bytes):
                         response = response.decode('utf-8')
-                    print(f"📥 [INFO] Auth response: {response}")
-                    
-                    # Handle ping messages during auth
-                    if response.startswith("2"):
-                        await websocket.send("3")
-                        continue
-                    
-                    if "successauth" in response.lower() or "auth" in response.lower():
-                        print("✅ [INFO] Authentication successful!")
-                        auth_success = True
-                        break
-                    elif "error" in response.lower():
-                        print("⚠️ [ERROR] Authentication failed!")
-                        return None, None
-                    
-                    # Check timeout
-                    if (asyncio.get_event_loop().time() - auth_start_time) > auth_timeout:
-                        print("⚠️ [WARNING] Authentication timeout - proceeding anyway")
-                        auth_success = True
-                        break
+                        print(f"📥 [INFO] Auth response: {response}")
+                        
+                        # Handle ping messages during auth
+                        if response.startswith("2"):
+                            await websocket.send("3")
+                            continue
+                        
+                        if "successauth" in response.lower() or "auth" in response.lower():
+                            print("✅ [INFO] Authentication successful!")
+                            auth_success = True
+                            break
+                        elif "error" in response.lower():
+                            print("⚠️ [ERROR] Authentication failed!")
+                            return None, None
+                        
+                        # Check timeout
+                        if (asyncio.get_event_loop().time() - auth_start_time) > auth_timeout:
+                            print("⚠️ [WARNING] Authentication timeout - proceeding anyway")
+                            auth_success = True
+                            break
                 except asyncio.TimeoutError:
                     print("⚠️ [WARNING] Authentication timeout - proceeding anyway")
                     auth_success = True
@@ -166,7 +166,7 @@ async def fetch_summary(asset, period, token):
                     if len(history_data) >= 50 or (asyncio.get_event_loop().time() - start_time) > data_collection_timeout:
                         print(f"✅ [INFO] Collected {len(history_data)} data points")
                         break
-                
+                        
                 except asyncio.TimeoutError:
                     # Check if we've collected enough data
                     if len(history_data) >= 10:  # Lower threshold for regular assets

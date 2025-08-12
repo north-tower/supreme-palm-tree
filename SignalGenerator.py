@@ -298,7 +298,7 @@ class SignalGenerator:
             print(f"[DEBUG] Starting SMC analysis...")
             swing_highs, swing_lows = self.detect_swing_points(history_df, lookback=5)
             bos_type, bos_price = self.detect_break_of_structure(swing_highs, swing_lows, current_price)
-            order_block = self.find_order_block(history_df, bos_type, bos_price, lookback=10)
+            order_block = self.find_best_order_block(history_df, bos_type, bos_price, lookback=20)
             smc_signal = self.generate_smc_signal(asset, current_price, bos_type, bos_price, order_block, rsi, swing_highs, swing_lows)
             
             print(f"[DEBUG] SMC Analysis results:")
@@ -506,8 +506,66 @@ class SignalGenerator:
             print(f"[ERROR] Error detecting BOS: {e}")
             return None, None
     
-    def find_order_block(self, history_df, bos_type, bos_price, lookback=10):
-        """Find Order Block based on BOS direction"""
+    def validate_order_block_quality(self, order_block, history_df, bos_type):
+        """Validate the quality of an order block based on SMC principles"""
+        try:
+            if not order_block or not history_df:
+                return False
+            
+            if not order_block.get("zone", False):
+                return True  # Skip validation for old single-price format
+            
+            ob_high = order_block.get("high")
+            ob_low = order_block.get("low")
+            ob_index = order_block.get("index")
+            
+            if ob_high is None or ob_low is None or ob_index is None:
+                return False
+            
+            # Check if the order block has a reasonable size
+            zone_size = ob_high - ob_low
+            if zone_size <= 0:
+                return False
+            
+            # Calculate the percentage size of the zone
+            zone_percentage = zone_size / ob_low
+            if zone_percentage < 0.0005:  # Zone too small (less than 0.05%)
+                print(f"[DEBUG] Order block zone too small: {zone_percentage:.6f}")
+                return False
+            
+            if zone_percentage > 0.05:  # Zone too large (more than 5%)
+                print(f"[DEBUG] Order block zone too large: {zone_percentage:.6f}")
+                return False
+            
+            # Check if the order block is followed by a significant move in the expected direction
+            if ob_index + 5 < len(history_df):
+                # Look at the next few candles after the order block
+                next_prices = history_df["Value"].iloc[ob_index+1:ob_index+6].values
+                if len(next_prices) > 0:
+                    if bos_type == "bullish":
+                        # For bullish order block, check if price moved up significantly
+                        max_move = max(next_prices) - ob_high
+                        move_percentage = max_move / ob_high if ob_high > 0 else 0
+                        if move_percentage < 0.001:  # Less than 0.1% move
+                            print(f"[DEBUG] Bullish order block followed by weak move: {move_percentage:.6f}")
+                            return False
+                    elif bos_type == "bearish":
+                        # For bearish order block, check if price moved down significantly
+                        max_move = ob_low - min(next_prices)
+                        move_percentage = max_move / ob_low if ob_low > 0 else 0
+                        if move_percentage < 0.001:  # Less than 0.1% move
+                            print(f"[DEBUG] Bearish order block followed by weak move: {move_percentage:.6f}")
+                            return False
+            
+            print(f"[DEBUG] Order block quality validation passed: size={zone_percentage:.6f}")
+            return True
+            
+        except Exception as e:
+            print(f"[ERROR] Error validating order block quality: {e}")
+            return False
+
+    def find_best_order_block(self, history_df, bos_type, bos_price, lookback=20):
+        """Find the best order block by evaluating multiple candidates"""
         try:
             if not bos_type or not bos_price:
                 print(f"[DEBUG] No BOS information available for order block detection")
@@ -519,52 +577,288 @@ class SignalGenerator:
             
             # Use a more flexible lookback for smaller datasets
             actual_lookback = min(lookback, len(history_df) - 1)
-            if actual_lookback < 3:
-                actual_lookback = 3
+            if actual_lookback < 5:
+                actual_lookback = 5
+            
+            print(f"[DEBUG] Looking for best order block with lookback {actual_lookback}")
+            
+            # Find multiple order block candidates
+            candidates = []
+            
+            if bos_type == "bullish":
+                # For bullish BOS, look for bearish moves before the break
+                for i in range(len(history_df) - actual_lookback, len(history_df) - 2):
+                    current_price = history_df["Value"].iloc[i]
+                    next_price = history_df["Value"].iloc[i + 1]
+                    
+                    # Skip invalid prices
+                    if current_price <= 0 or next_price <= 0 or math.isnan(current_price) or math.isnan(next_price):
+                        continue
+                    
+                    # Look for bearish moves (price going down)
+                    if current_price > next_price:  # Bearish candle
+                        # Check if this is a significant move
+                        price_change = (current_price - next_price) / current_price
+                        if price_change > 0.0005:  # 0.05% minimum move
+                            # Find the range of this potential order block
+                            ob_high = current_price
+                            ob_low = next_price
+                            
+                            # Look for additional candles in the same direction
+                            for j in range(i + 2, min(i + 5, len(history_df))):
+                                if j < len(history_df):
+                                    j_price = history_df["Value"].iloc[j]
+                                    if j_price > 0 and not math.isnan(j_price):
+                                        if j_price < ob_low:
+                                            ob_low = j_price
+                                        elif j_price > ob_high:
+                                            break
+                            
+                            # Calculate quality metrics
+                            zone_size = ob_high - ob_low
+                            zone_percentage = zone_size / ob_low if ob_low > 0 else 0
+                            
+                            # Score the candidate (higher score = better)
+                            score = 0
+                            if 0.001 <= zone_percentage <= 0.02:  # Optimal zone size
+                                score += 3
+                            elif 0.0005 <= zone_percentage <= 0.05:  # Acceptable zone size
+                                score += 1
+                            
+                            if price_change > 0.002:  # Strong move
+                                score += 2
+                            elif price_change > 0.001:  # Moderate move
+                                score += 1
+                            
+                            # Prefer order blocks closer to the BOS
+                            distance_to_bos = len(history_df) - 1 - i
+                            if distance_to_bos <= 10:
+                                score += 2
+                            elif distance_to_bos <= 20:
+                                score += 1
+                            
+                            candidate = {
+                                "index": i,
+                                "high": ob_high,
+                                "low": ob_low,
+                                "price": (ob_high + ob_low) / 2,
+                                "type": "bullish_ob",
+                                "timestamp": history_df["Timestamp"].iloc[i],
+                                "zone": True,
+                                "score": score,
+                                "price_change": price_change,
+                                "zone_percentage": zone_percentage,
+                                "distance_to_bos": distance_to_bos
+                            }
+                            
+                            candidates.append(candidate)
+                            print(f"[DEBUG] Bullish OB candidate: score={score}, price_change={price_change:.6f}, zone_size={zone_percentage:.6f}, distance={distance_to_bos}")
+                
+            elif bos_type == "bearish":
+                # For bearish BOS, look for bullish moves before the break
+                for i in range(len(history_df) - actual_lookback, len(history_df) - 2):
+                    current_price = history_df["Value"].iloc[i]
+                    next_price = history_df["Value"].iloc[i + 1]
+                    
+                    # Skip invalid prices
+                    if current_price <= 0 or next_price <= 0 or math.isnan(current_price) or math.isnan(next_price):
+                        continue
+                    
+                    # Look for bullish moves (price going up)
+                    if current_price < next_price:  # Bullish candle
+                        # Check if this is a significant move
+                        price_change = (next_price - current_price) / current_price
+                        if price_change > 0.0005:  # 0.05% minimum move
+                            # Find the range of this potential order block
+                            ob_low = current_price
+                            ob_high = next_price
+                            
+                            # Look for additional candles in the same direction
+                            for j in range(i + 2, min(i + 5, len(history_df))):
+                                if j < len(history_df):
+                                    j_price = history_df["Value"].iloc[j]
+                                    if j_price > 0 and not math.isnan(j_price):
+                                        if j_price > ob_high:
+                                            ob_high = j_price
+                                        elif j_price < ob_low:
+                                            break
+                            
+                            # Calculate quality metrics
+                            zone_size = ob_high - ob_low
+                            zone_percentage = zone_size / ob_low if ob_low > 0 else 0
+                            
+                            # Score the candidate (higher score = better)
+                            score = 0
+                            if 0.001 <= zone_percentage <= 0.02:  # Optimal zone size
+                                score += 3
+                            elif 0.0005 <= zone_percentage <= 0.05:  # Acceptable zone size
+                                score += 1
+                            
+                            if price_change > 0.002:  # Strong move
+                                score += 2
+                            elif price_change > 0.001:  # Moderate move
+                                score += 1
+                            
+                            # Prefer order blocks closer to the BOS
+                            distance_to_bos = len(history_df) - 1 - i
+                            if distance_to_bos <= 10:
+                                score += 2
+                            elif distance_to_bos <= 20:
+                                score += 1
+                            
+                            candidate = {
+                                "index": i,
+                                "high": ob_high,
+                                "low": ob_low,
+                                "price": (ob_high + ob_low) / 2,
+                                "type": "bearish_ob",
+                                "timestamp": history_df["Timestamp"].iloc[i],
+                                "zone": True,
+                                "score": score,
+                                "price_change": price_change,
+                                "zone_percentage": zone_percentage,
+                                "distance_to_bos": distance_to_bos
+                            }
+                            
+                            candidates.append(candidate)
+                            print(f"[DEBUG] Bearish OB candidate: score={score}, price_change={price_change:.6f}, zone_size={zone_percentage:.6f}, distance={distance_to_bos}")
+            
+            # Select the best candidate
+            if candidates:
+                # Sort by score (highest first), then by distance (closest first)
+                candidates.sort(key=lambda x: (-x["score"], x["distance_to_bos"]))
+                best_candidate = candidates[0]
+                
+                print(f"[DEBUG] Selected best order block: score={best_candidate['score']}, type={best_candidate['type']}")
+                print(f"[DEBUG] Order block zone: {best_candidate['low']:.6f} - {best_candidate['high']:.6f}")
+                
+                return best_candidate
+            else:
+                print(f"[DEBUG] No order block candidates found")
+                return None
+            
+        except Exception as e:
+            print(f"[ERROR] Error finding best order block: {e}")
+            return None
+
+    def find_order_block(self, history_df, bos_type, bos_price, lookback=20):
+        """Find Order Block based on SMC principles - looks for strong moves followed by retracements"""
+        try:
+            if not bos_type or not bos_price:
+                print(f"[DEBUG] No BOS information available for order block detection")
+                return None
+            
+            if history_df is None or len(history_df) < lookback + 1:
+                print(f"[DEBUG] Insufficient data for order block detection")
+                return None
+            
+            # Use a more flexible lookback for smaller datasets
+            actual_lookback = min(lookback, len(history_df) - 1)
+            if actual_lookback < 5:
+                actual_lookback = 5
             
             print(f"[DEBUG] Looking for order block with lookback {actual_lookback}")
             
-            # Find the last opposite candle before BOS
+            # Find the order block zone based on SMC principles
             order_block = None
             
-            for i in range(len(history_df) - actual_lookback, len(history_df) - 1):
-                current_price = history_df["Value"].iloc[i]
-                next_price = history_df["Value"].iloc[i + 1]
+            if bos_type == "bullish":
+                # For bullish BOS, look for the last strong bearish move before the break
+                # This creates a bullish order block (buyers waiting to enter)
+                for i in range(len(history_df) - actual_lookback, len(history_df) - 2):
+                    current_price = history_df["Value"].iloc[i]
+                    next_price = history_df["Value"].iloc[i + 1]
+                    
+                    # Skip invalid prices
+                    if current_price <= 0 or next_price <= 0 or math.isnan(current_price) or math.isnan(next_price):
+                        continue
+                    
+                    # Look for a strong bearish move (price going down significantly)
+                    if current_price > next_price:  # Bearish candle (price going down)
+                        # Check if this is a significant move (at least 0.1% drop)
+                        price_change = (current_price - next_price) / current_price
+                        if price_change > 0.001:  # 0.1% minimum move
+                            # Find the range of this order block (look for the high and low)
+                            ob_high = current_price
+                            ob_low = next_price
+                            
+                            # Look for additional candles in the same direction to establish the zone
+                            for j in range(i + 2, min(i + 5, len(history_df))):
+                                if j < len(history_df):
+                                    j_price = history_df["Value"].iloc[j]
+                                    if j_price > 0 and not math.isnan(j_price):
+                                        if j_price < ob_low:
+                                            ob_low = j_price
+                                        elif j_price > ob_high:
+                                            # If price goes above the high, this might be the end of the order block
+                                            break
+                            
+                            order_block = {
+                                "index": i,
+                                "high": ob_high,
+                                "low": ob_low,
+                                "price": (ob_high + ob_low) / 2,  # Mid-point for compatibility
+                                "type": "bullish_ob",
+                                "timestamp": history_df["Timestamp"].iloc[i],
+                                "zone": True
+                            }
+                            print(f"[DEBUG] Found bullish order block zone: high={ob_high}, low={ob_low}, mid={order_block['price']}")
+                            break
                 
-                # Skip invalid prices
-                if current_price <= 0 or next_price <= 0 or math.isnan(current_price) or math.isnan(next_price):
-                    continue
-                
-                if bos_type == "bullish":
-                    # For bullish BOS, look for bearish candle before the break
-                    if current_price < next_price:  # Bearish candle (price going down)
-                        order_block = {
-                            "index": i,
-                            "price": current_price,
-                            "type": "bullish_ob",
-                            "timestamp": history_df["Timestamp"].iloc[i]
-                        }
-                        print(f"[DEBUG] Found bullish order block at price {current_price}")
-                        break
-                
-                elif bos_type == "bearish":
-                    # For bearish BOS, look for bullish candle before the break
-                    if current_price > next_price:  # Bullish candle (price going up)
-                        order_block = {
-                            "index": i,
-                            "price": current_price,
-                            "type": "bearish_ob",
-                            "timestamp": history_df["Timestamp"].iloc[i]
-                        }
-                        print(f"[DEBUG] Found bearish order block at price {current_price}")
-                        break
+            elif bos_type == "bearish":
+                # For bearish BOS, look for the last strong bullish move before the break
+                # This creates a bearish order block (sellers waiting to enter)
+                for i in range(len(history_df) - actual_lookback, len(history_df) - 2):
+                    current_price = history_df["Value"].iloc[i]
+                    next_price = history_df["Value"].iloc[i + 1]
+                    
+                    # Skip invalid prices
+                    if current_price <= 0 or next_price <= 0 or math.isnan(current_price) or math.isnan(next_price):
+                        continue
+                    
+                    # Look for a strong bullish move (price going up significantly)
+                    if current_price < next_price:  # Bullish candle (price going up)
+                        # Check if this is a significant move (at least 0.1% rise)
+                        price_change = (next_price - current_price) / current_price
+                        if price_change > 0.001:  # 0.1% minimum move
+                            # Find the range of this order block (look for the high and low)
+                            ob_low = current_price
+                            ob_high = next_price
+                            
+                            # Look for additional candles in the same direction to establish the zone
+                            for j in range(i + 2, min(i + 5, len(history_df))):
+                                if j < len(history_df):
+                                    j_price = history_df["Value"].iloc[j]
+                                    if j_price > 0 and not math.isnan(j_price):
+                                        if j_price > ob_high:
+                                            ob_high = j_price
+                                        elif j_price < ob_low:
+                                            # If price goes below the low, this might be the end of the order block
+                                            break
+                            
+                            order_block = {
+                                "index": i,
+                                "high": ob_high,
+                                "low": ob_low,
+                                "price": (ob_high + ob_low) / 2,  # Mid-point for compatibility
+                                "type": "bearish_ob",
+                                "timestamp": history_df["Timestamp"].iloc[i],
+                                "zone": True
+                            }
+                            print(f"[DEBUG] Found bearish order block zone: high={ob_high}, low={ob_low}, mid={order_block['price']}")
+                            break
             
             if order_block:
-                print(f"[DEBUG] Order block found: {order_block['type']} at {order_block['price']}")
+                # Validate the quality of the order block
+                if self.validate_order_block_quality(order_block, history_df, bos_type):
+                    print(f"[DEBUG] Order block zone found and validated: {order_block['type']} at {order_block['price']} (range: {order_block['low']} - {order_block['high']})")
+                    return order_block  # Return the validated order block
+                else:
+                    print(f"[DEBUG] Order block found but failed quality validation")
+                    return None  # Return None if validation fails
             else:
                 print(f"[DEBUG] No order block found")
-            
-            return order_block
+                return None
             
         except Exception as e:
             print(f"[ERROR] Error finding order block: {e}")
@@ -579,15 +873,36 @@ class SignalGenerator:
             if current_price <= 0 or math.isnan(current_price):
                 return False
             
-            ob_price = order_block["price"]
-            if ob_price <= 0 or math.isnan(ob_price):
-                return False
+            # Check if this is a zone-based order block
+            if order_block.get("zone", False) and "high" in order_block and "low" in order_block:
+                ob_high = order_block["high"]
+                ob_low = order_block["low"]
+                
+                # Check if current price is within the order block zone
+                if ob_low <= current_price <= ob_high:
+                    print(f"[DEBUG] Order block zone check: current={current_price}, ob_range=[{ob_low}, {ob_high}] - PRICE IN ZONE")
+                    return True
+                else:
+                    # Check if price is near the zone boundaries with tolerance
+                    distance_to_zone = min(abs(current_price - ob_high), abs(current_price - ob_low))
+                    zone_size = ob_high - ob_low
+                    relative_distance = distance_to_zone / zone_size if zone_size > 0 else 0
+                    
+                    print(f"[DEBUG] Order block zone check: current={current_price}, ob_range=[{ob_low}, {ob_high}], distance_to_zone={distance_to_zone:.6f}, relative_distance={relative_distance:.6f}, tolerance={tolerance}")
+                    
+                    return relative_distance <= tolerance
             
-            price_diff = abs(current_price - ob_price) / ob_price
-            
-            print(f"[DEBUG] Order block check: current={current_price}, ob_price={ob_price}, diff={price_diff:.6f}, tolerance={tolerance}")
-            
-            return price_diff <= tolerance
+            else:
+                # Fallback to old single-price logic for compatibility
+                ob_price = order_block["price"]
+                if ob_price <= 0 or math.isnan(ob_price):
+                    return False
+                
+                price_diff = abs(current_price - ob_price) / ob_price
+                
+                print(f"[DEBUG] Order block single-price check: current={current_price}, ob_price={ob_price}, diff={price_diff:.6f}, tolerance={tolerance}")
+                
+                return price_diff <= tolerance
             
         except Exception as e:
             print(f"[ERROR] Error checking order block: {e}")
@@ -845,32 +1160,116 @@ class SignalGenerator:
             print(f"[SMC] [INFO] No BOS detected")
             return self.format_smc_signal("HOLD", asset, current_price, None, None, expiration_time_minutes, lang_manager=lang_manager)
 
-        # --- 4. Find order block (last opposite candle before BOS) ---
+        # --- 4. Find order block using improved SMC logic ---
         order_block = None
         if bos_type == "bullish":
-            # Find last bearish candle before BOS
-            for i in range(bos_index-1, 0, -1):
-                if prices[i] < prices[i-1]:  # Bearish candle
-                    order_block = {"index": i, "price": prices[i], "type": "bullish_ob"}
-                    break
+            # For bullish BOS, look for the last strong bearish move before the break
+            # This creates a bullish order block (buyers waiting to enter)
+            for i in range(bos_index-1, max(0, bos_index-20), -1):
+                if i > 0 and i < len(prices) - 1:
+                    current_price_ob = prices[i]
+                    next_price_ob = prices[i + 1]
+                    
+                    # Look for a strong bearish move (price going down significantly)
+                    if current_price_ob > next_price_ob:  # Bearish candle (price going down)
+                        # Check if this is a significant move (at least 0.1% drop)
+                        price_change = (current_price_ob - next_price_ob) / current_price_ob
+                        if price_change > 0.001:  # 0.1% minimum move
+                            # Find the range of this order block
+                            ob_high = current_price_ob
+                            ob_low = next_price_ob
+                            
+                            # Look for additional candles in the same direction
+                            for j in range(i + 2, min(i + 5, len(prices))):
+                                if j < len(prices):
+                                    j_price = prices[j]
+                                    if j_price < ob_low:
+                                        ob_low = j_price
+                                    elif j_price > ob_high:
+                                        break
+                            
+                            order_block = {
+                                "index": i,
+                                "high": ob_high,
+                                "low": ob_low,
+                                "price": (ob_high + ob_low) / 2,
+                                "type": "bullish_ob",
+                                "zone": True
+                            }
+                            print(f"[SMC] [INFO] Found bullish order block zone: high={ob_high}, low={ob_low}")
+                            break
+                            
         elif bos_type == "bearish":
-            # Find last bullish candle before BOS
-            for i in range(bos_index-1, 0, -1):
-                if prices[i] > prices[i-1]:  # Bullish candle
-                    order_block = {"index": i, "price": prices[i], "type": "bearish_ob"}
-                    break
+            # For bearish BOS, look for the last strong bullish move before the break
+            # This creates a bearish order block (sellers waiting to enter)
+            for i in range(bos_index-1, max(0, bos_index-20), -1):
+                if i > 0 and i < len(prices) - 1:
+                    current_price_ob = prices[i]
+                    next_price_ob = prices[i + 1]
+                    
+                    # Look for a strong bullish move (price going up significantly)
+                    if current_price_ob < next_price_ob:  # Bullish candle (price going up)
+                        # Check if this is a significant move (at least 0.1% rise)
+                        price_change = (next_price_ob - current_price_ob) / current_price_ob
+                        if price_change > 0.001:  # 0.1% minimum move
+                            # Find the range of this order block
+                            ob_low = current_price_ob
+                            ob_high = next_price_ob
+                            
+                            # Look for additional candles in the same direction
+                            for j in range(i + 2, min(i + 5, len(prices))):
+                                if j < len(prices):
+                                    j_price = prices[j]
+                                    if j_price > ob_high:
+                                        ob_high = j_price
+                                    elif j_price < ob_low:
+                                        break
+                            
+                            order_block = {
+                                "index": i,
+                                "high": ob_high,
+                                "low": ob_low,
+                                "price": (ob_high + ob_low) / 2,
+                                "type": "bearish_ob",
+                                "zone": True
+                            }
+                            print(f"[SMC] [INFO] Found bearish order block zone: high={ob_high}, low={ob_low}")
+                            break
 
         if not order_block:
             print(f"[SMC] [INFO] No order block found")
             return self.format_smc_signal("HOLD", asset, current_price, None, bos_price, expiration_time_minutes, lang_manager=lang_manager)
 
-        # --- 5. Wait for price to return to OB (increase tolerance) ---
+        # --- 5. Wait for price to return to OB zone (use zone-based logic) ---
         tolerance = 0.003  # Increased to 0.3%
-        ob_price = order_block["price"]
-        price_in_ob = abs(current_price - ob_price) / ob_price <= tolerance
+        
+        # Use zone-based order block check if available
+        if order_block.get("zone", False) and "high" in order_block and "low" in order_block:
+            ob_high = order_block["high"]
+            ob_low = order_block["low"]
+            
+            # Check if current price is within the order block zone
+            if ob_low <= current_price <= ob_high:
+                price_in_ob = True
+                print(f"[SMC] [INFO] Price is within order block zone: current={current_price}, ob_range=[{ob_low}, {ob_high}]")
+            else:
+                # Check if price is near the zone boundaries with tolerance
+                distance_to_zone = min(abs(current_price - ob_high), abs(current_price - ob_low))
+                zone_size = ob_high - ob_low
+                relative_distance = distance_to_zone / zone_size if zone_size > 0 else 0
+                price_in_ob = relative_distance <= tolerance
+                
+                print(f"[SMC] [INFO] Price near order block zone: current={current_price}, ob_range=[{ob_low}, {ob_high}], distance={distance_to_zone:.6f}, relative={relative_distance:.6f}, tolerance={tolerance}")
+        else:
+            # Fallback to single price logic
+            ob_price = order_block["price"]
+            price_in_ob = abs(current_price - ob_price) / ob_price <= tolerance
+            print(f"[SMC] [INFO] Using single price order block check: current={current_price}, ob_price={ob_price}")
+        
         if not price_in_ob:
-            print(f"[SMC] [INFO] Price not in order block area (current: {current_price}, OB: {ob_price})")
-            return self.format_smc_signal("HOLD", asset, current_price, ob_price, bos_price, expiration_time_minutes, lang_manager=lang_manager)
+            ob_info = f"zone [{order_block.get('low', 'N/A')}, {order_block.get('high', 'N/A')}]" if order_block.get("zone", False) else f"price {order_block.get('price', 'N/A')}"
+            print(f"[SMC] [INFO] Price not in order block area (current: {current_price}, OB: {ob_info})")
+            return self.format_smc_signal("HOLD", asset, current_price, order_block.get("price"), bos_price, expiration_time_minutes, lang_manager=lang_manager)
 
         # --- 6. Relaxed confirmation for bullish SMC ---
         confirmation = False
@@ -885,7 +1284,7 @@ class SignalGenerator:
         if confirmation:
             signal_type = "BUY" if bos_type == "bullish" else "SELL"
             print(f"[SMC] [INFO] SMC {signal_type} signal confirmed!")
-            return self.format_smc_signal(signal_type, asset, current_price, ob_price, bos_price, expiration_time_minutes, lang_manager=lang_manager)
+            return self.format_smc_signal(signal_type, asset, current_price, order_block.get("price"), bos_price, expiration_time_minutes, lang_manager=lang_manager)
         else:
             print(f"[SMC] [INFO] No confirmation for SMC signal")
-            return self.format_smc_signal("HOLD", asset, current_price, ob_price, bos_price, expiration_time_minutes, lang_manager=lang_manager)
+            return self.format_smc_signal("HOLD", asset, current_price, order_block.get("price"), bos_price, expiration_time_minutes, lang_manager=lang_manager)
