@@ -205,7 +205,7 @@ async def main():
     # Call the fetch_summary function to get the results
     results, history_data = await fetch_summary(asset, period, token)
     signal_gen = SignalGenerator()
-    signal = await signal_gen.generate_signal(asset, period)
+    signal = await signal_gen.generate_signal(asset, period, mode='standard')
 
     print("Generated Signal:", signal)
     print(results)

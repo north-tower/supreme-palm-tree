@@ -31,10 +31,17 @@ class TelegramBotClient:
         self.user_request_count = {}
         self.user_states = {}  # Store user states for support system
         self.user_modes = {}  # user_id -> 'standard' or 'smc'
+        self.modes_file = "user_modes.json"  # File to persist user modes
+        
+        # Load user modes from file
+        self.load_user_modes()
+        
+        # Load mode performance data
+        self.load_mode_performance()
 
         self.api_id = "26422824"
         self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
-        self.bot_token = "8165397037:AAGv_zhIhNybcFhopXssxWxQq4N8qJYULn4"
+        self.bot_token = "8129679884:AAGEbC-P6_YFQFzERMiV2UevFx6uXAqSUhs"
         
         # Initialize with default admin
         self.default_admin_id = "1885741502"  # Replace with your Telegram ID
@@ -44,6 +51,95 @@ class TelegramBotClient:
             raise ValueError("Missing environment variables: API_ID, API_HASH, or BOT_TOKEN")
 
         self.client = None
+
+    def load_user_modes(self):
+        """Load user modes from JSON file"""
+        try:
+            if os.path.exists(self.modes_file):
+                with open(self.modes_file, 'r', encoding='utf-8') as f:
+                    self.user_modes = json.load(f)
+                print(f"✅ [INFO] Loaded {len(self.user_modes)} user modes from {self.modes_file}")
+            else:
+                print(f"ℹ️ [INFO] No existing user modes file found, starting fresh")
+                self.user_modes = {}
+        except Exception as e:
+            print(f"⚠️ [WARNING] Failed to load user modes: {e}, starting fresh")
+            self.user_modes = {}
+
+    def save_user_modes(self):
+        """Save user modes to JSON file"""
+        try:
+            with open(self.modes_file, 'w', encoding='utf-8') as f:
+                json.dump(self.user_modes, f, indent=2, ensure_ascii=False)
+            print(f"✅ [INFO] Saved {len(self.user_modes)} user modes to {self.modes_file}")
+        except Exception as e:
+            print(f"⚠️ [ERROR] Failed to save user modes: {e}")
+
+    def set_user_mode(self, user_id, mode):
+        """Set user mode and persist to file"""
+        self.user_modes[user_id] = mode
+        self.save_user_modes()
+        print(f"✅ [INFO] User {user_id} mode set to {mode}")
+
+    def load_mode_performance(self):
+        """Load mode performance data from JSON file"""
+        try:
+            if os.path.exists("mode_performance.json"):
+                with open("mode_performance.json", 'r', encoding='utf-8') as f:
+                    self.mode_performance = json.load(f)
+                print(f"✅ [INFO] Loaded mode performance data")
+            else:
+                print(f"ℹ️ [INFO] No existing mode performance file found, starting fresh")
+                self.mode_performance = {"standard": {"wins": 0, "losses": 0}, "smc": {"wins": 0, "losses": 0}}
+        except Exception as e:
+            print(f"⚠️ [WARNING] Failed to load mode performance: {e}, starting fresh")
+            self.mode_performance = {"standard": {"wins": 0, "losses": 0}, "smc": {"wins": 0, "losses": 0}}
+
+    def save_mode_performance(self):
+        """Save mode performance data to JSON file"""
+        try:
+            with open("mode_performance.json", 'w', encoding='utf-8') as f:
+                json.dump(self.mode_performance, f, indent=2, ensure_ascii=False)
+            print(f"✅ [INFO] Saved mode performance data")
+        except Exception as e:
+            print(f"⚠️ [ERROR] Failed to save mode performance: {e}")
+
+    def record_trade_result(self, user_id, result):
+        """Record trade result for the user's current mode"""
+        try:
+            user_mode = self.user_modes.get(user_id, 'standard')
+            if result == "plus":
+                self.mode_performance[user_mode]["wins"] += 1
+            elif result == "minus":
+                self.mode_performance[user_mode]["losses"] += 1
+            
+            self.save_mode_performance()
+            
+            # Calculate win rate
+            total_trades = self.mode_performance[user_mode]["wins"] + self.mode_performance[user_mode]["losses"]
+            win_rate = (self.mode_performance[user_mode]["wins"] / total_trades * 100) if total_trades > 0 else 0
+            
+            print(f"✅ [INFO] Recorded {result} for user {user_id} in {user_mode} mode. Win rate: {win_rate:.1f}%")
+            return win_rate
+        except Exception as e:
+            print(f"⚠️ [ERROR] Failed to record trade result: {e}")
+            return None
+
+    def get_mode_stats(self):
+        """Get performance statistics for both modes"""
+        stats = {}
+        for mode in ["standard", "smc"]:
+            wins = self.mode_performance[mode]["wins"]
+            losses = self.mode_performance[mode]["losses"]
+            total = wins + losses
+            win_rate = (wins / total * 100) if total > 0 else 0
+            stats[mode] = {
+                "wins": wins,
+                "losses": losses,
+                "total": total,
+                "win_rate": win_rate
+            }
+        return stats
 
     async def connect(self):
         try:
@@ -99,10 +195,16 @@ class TelegramBotClient:
                 self.handle_admin_command, 
                 events.NewMessage(pattern='/approve|/pending|/stats|/addadmin|/removeadmin|/listadmins|/tickets|/debug|/transactions')
             )
+            self.client.add_event_handler(self.handle_mode_stats_command, events.NewMessage(pattern='/modestats'))
+            self.client.add_event_handler(self.handle_mode_info_command, events.NewMessage(pattern='/modeinfo'))
             self.client.add_event_handler(self.handle_asset_selection, events.CallbackQuery)
             self.client.add_event_handler(
                 self.handle_support_callback,
                 events.CallbackQuery(pattern='^support:')
+            )
+            self.client.add_event_handler(
+                self.handle_menu_callback,
+                events.CallbackQuery(pattern='^menu:')
             )
             # Add handler for regular messages
             self.client.add_event_handler(self.handle_message, events.NewMessage)
@@ -169,11 +271,20 @@ class TelegramBotClient:
                 title = lang_manager.get_text("main_menu_title")
                 warning = lang_manager.get_text("main_menu_warning")
                 prompt = lang_manager.get_text("main_menu_prompt")
+                
+                # Add mode information
+                mode_info = ""
+                if mode == "smc":
+                    mode_info = lang_manager.get_text("mode_smc_active") + "\n" + lang_manager.get_text("mode_smc_description")
+                else:
+                    mode_info = lang_manager.get_text("mode_standard_active") + "\n" + lang_manager.get_text("mode_standard_description")
+                
                 message = (
                     f"{title}\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"{warning}\n\n"
                     f"{prompt}\n\n"
+                    f"{mode_info}\n\n"
                     "<b>🤖 Enhanced with Pro Signal Logic (v2)</b>"
                 )
 
@@ -189,6 +300,10 @@ class TelegramBotClient:
                 [
                     Button.inline(lang_manager.get_text("menu_button_help"), b"menu:help"),
                     Button.inline(lang_manager.get_text("menu_button_language"), b"menu:language")
+                ],
+                [
+                    Button.inline(lang_manager.get_text("menu_button_modeinfo"), b"menu:modeinfo"),
+                    Button.inline(lang_manager.get_text("menu_button_modestats"), b"menu:modestats")
                 ],
                 [mode_button]
             ]
@@ -371,7 +486,9 @@ class TelegramBotClient:
 
             if results and history_data:
                 signal_gen = SignalGenerator()
-                signal_info = await signal_gen.generate_signal(asset, time_choice, fetch_function=self.fetch_summary_with_handling)
+                # Get user mode for signal generation
+                user_mode = self.user_modes.get(user_id, 'standard')
+                signal_info = await signal_gen.generate_signal(asset, time_choice, fetch_function=self.fetch_summary_with_handling, mode=user_mode)
 
                 # Debug: Print what signal_info contains
                 print(f"[DEBUG] Signal info type: {type(signal_info)}")
@@ -1836,7 +1953,9 @@ Please describe your issue below:
                         if history_data and len(history_data) > 0:
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Sample history data: {history_data[:3]}")
                         signal_gen = SignalGenerator()
-                        signal_info = await signal_gen.generate_signal(asset, period, fetch_function=self.fetch_summary_with_handling)
+                        # Get user mode for signal generation
+                        user_mode = self.user_modes.get(event.sender_id, 'standard')
+                        signal_info = await signal_gen.generate_signal(asset, period, fetch_function=self.fetch_summary_with_handling, mode=user_mode)
                         if not signal_info or signal_info == "NO_SIGNAL" or "НЕТ СИГНАЛА" in str(signal_info):
                             print(f"🔍 [ANALYSIS] {pair} {period}m: Trying fallback signal generation...")
                             direction = self.generate_fallback_signal(history_data, pair, period)
@@ -1992,7 +2111,9 @@ Please describe your issue below:
                         score = 0
                     # Only consider strong BUY/SELL signals
                     signal_gen = SignalGenerator()
-                    signal_info = await signal_gen.generate_signal(asset, period, fetch_function=self.fetch_summary_with_handling)
+                    # Get user mode for signal generation
+                    user_mode = self.user_modes.get(event.sender_id, 'standard')
+                    signal_info = await signal_gen.generate_signal(asset, period, fetch_function=self.fetch_summary_with_handling, mode=user_mode)
                     direction = None
                     if isinstance(signal_info, str):
                         import re
@@ -2298,8 +2419,27 @@ Please describe your issue below:
             # Update result
             updated = transaction_logger.update_result(transaction_id, result)
             if updated:
-                # Send feedback confirmation
-                feedback_msg = await event.respond(f"Thank you! Your feedback has been recorded as {'WIN' if result == 'plus' else 'LOSS'}.")
+                # Record mode performance
+                win_rate = self.record_trade_result(event.sender_id, result)
+                
+                # Send feedback confirmation with mode stats
+                user_mode = self.user_modes.get(event.sender_id, 'standard')
+                mode_stats = self.get_mode_stats()
+                current_mode_stats = mode_stats[user_mode]
+                
+                # Get mode display name for feedback
+                mode_display = "🧠 SMC Mode" if user_mode == 'smc' else "⚡ Standard Mode"
+                
+                win_rate_formatted = f"{current_mode_stats['win_rate']:.1f}"
+                feedback_text = (
+                    f"Thank you! Your feedback has been recorded as {'WIN' if result == 'plus' else 'LOSS'}.\n\n"
+                    f"{lang_manager.get_text('trade_feedback_mode_performance').format(mode=mode_display)}\n"
+                    f"{lang_manager.get_text('trade_feedback_wins').format(wins=current_mode_stats['wins'])}\n"
+                    f"{lang_manager.get_text('trade_feedback_losses').format(losses=current_mode_stats['losses'])}\n"
+                    f"{lang_manager.get_text('trade_feedback_winrate').format(winrate=win_rate_formatted)}"
+                )
+                
+                feedback_msg = await event.respond(feedback_text, parse_mode='markdown')
                 # Store the feedback message for auto-delete
                 await self.store_message(event.sender_id, feedback_msg)
                 # Show main menu
@@ -2382,13 +2522,259 @@ Please describe your issue below:
         user_id = event.sender_id
         data = event.data.decode('utf-8')
         if data == "mode:smc":
-            self.user_modes[user_id] = "smc"
-            await event.respond("🧠 SMC Mode enabled! All signals will use Smart Money Concepts logic.")
+            self.set_user_mode(user_id, "smc")
+            await event.respond(lang_manager.get_text("mode_toggle_smc_enabled"))
         elif data == "mode:standard":
-            self.user_modes[user_id] = "standard"
-            await event.respond("⚡ Standard Mode enabled! All signals will use retail TA logic.")
+            self.set_user_mode(user_id, "standard")
+            await event.respond(lang_manager.get_text("mode_toggle_standard_enabled"))
         # Refresh the main menu to reflect the new mode
         await self.show_main_menu(event)
+
+    async def handle_mode_stats_command(self, event):
+        """Handle the /modestats command to show mode performance statistics"""
+        try:
+            user_id = event.sender_id
+            
+            # Check if user is admin
+            if not user_manager.is_admin(str(user_id)):
+                await event.respond("❌ This command is only available to administrators.")
+                return
+            
+            mode_stats = self.get_mode_stats()
+            
+            stats_message = (
+                f"{lang_manager.get_text('mode_stats_title')}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            )
+            
+            for mode, stats in mode_stats.items():
+                mode_emoji = "🧠" if mode == "smc" else "⚡"
+                mode_name = lang_manager.get_text("mode_stats_smc") if mode == "smc" else lang_manager.get_text("mode_stats_standard")
+                
+                win_rate_formatted = f"{stats['win_rate']:.1f}"
+                stats_message += (
+                    f"{mode_emoji} {mode_name}\n"
+                    f"{lang_manager.get_text('mode_stats_wins').format(wins=stats['wins'])}\n"
+                    f"{lang_manager.get_text('mode_stats_losses').format(losses=stats['losses'])}\n"
+                    f"{lang_manager.get_text('mode_stats_total').format(total=stats['total'])}\n"
+                    f"{lang_manager.get_text('mode_stats_winrate').format(winrate=win_rate_formatted)}\n\n"
+                )
+            
+            # Add recommendations
+            standard_win_rate = mode_stats['standard']['win_rate']
+            smc_win_rate = mode_stats['smc']['win_rate']
+            
+            if standard_win_rate > smc_win_rate:
+                recommendation = lang_manager.get_text("mode_stats_better_standard")
+            elif smc_win_rate > standard_win_rate:
+                recommendation = lang_manager.get_text("mode_stats_better_smc")
+            else:
+                recommendation = lang_manager.get_text("mode_stats_similar")
+            
+            stats_message += f"{lang_manager.get_text('mode_stats_recommendation').format(recommendation=recommendation)}"
+            
+            await event.respond(stats_message, parse_mode='markdown')
+            
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in handle_mode_stats_command: {e}")
+            await event.respond("❌ An error occurred while fetching mode statistics.")
+
+    async def handle_mode_info_command(self, event):
+        """Handle the /modeinfo command to show educational content about modes"""
+        try:
+            user_id = event.sender_id
+            current_mode = self.user_modes.get(user_id, 'standard')
+            
+            info_message = (
+                "🤖 **Trading Bot Modes Guide**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🎯 **Your Current Mode:** {'🧠 SMC Mode' if current_mode == 'smc' else '⚡ Standard Mode'}\n\n"
+                
+                "⚡ **Standard Mode (Hybrid Approach)**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                "• Combines traditional technical analysis with SMC concepts\n"
+                "• **Indicators:** RSI, Support/Resistance, Candlestick patterns, MACD, Bollinger Bands, Moving Averages\n"
+                "• **Signal Priority:** SMC first, then traditional TA fallback\n"
+                "• **Flexibility:** Higher (requires 2-3 conditions)\n"
+                "• **Best For:** Beginners, ranging markets, higher frequency trading\n"
+                "• **Risk:** Medium (more signals, moderate accuracy)\n\n"
+                
+                "🧠 **SMC Mode (Pure Smart Money Concepts)**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                "• Uses exclusively institutional trading concepts\n"
+                "• **Features:** Swing analysis, Break of Structure (BOS), Order Blocks, Fair Value Gaps (FVG), Liquidity levels\n"
+                "• **Signal Priority:** SMC only (no fallback)\n"
+                "• **Flexibility:** Lower (strict validation required)\n"
+                "• **Best For:** Experienced traders, trending markets, higher conviction trades\n"
+                "• **Risk:** Lower (fewer signals, higher accuracy)\n\n"
+                
+                "💡 **When to Use Each Mode:**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                "• **Use Standard Mode when:**\n"
+                "  - Market is ranging/sideways\n"
+                "  - You want more trading opportunities\n"
+                "  - You're learning trading concepts\n"
+                "  - Volatility is low\n\n"
+                
+                "• **Use SMC Mode when:**\n"
+                "  - Market is trending strongly\n"
+                "  - You want higher quality signals\n"
+                "  - You're experienced with SMC\n"
+                "  - Volatility is high\n\n"
+                
+                "🔄 **Switch Modes:** Use the toggle button in the main menu\n"
+                "📊 **Track Performance:** Use /modestats (admin only)\n"
+                "🎯 **Current Performance:** Check your trade results for mode-specific stats"
+            )
+            
+            await event.respond(info_message, parse_mode='markdown')
+            
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in handle_mode_info_command: {e}")
+            await event.respond("❌ An error occurred while fetching mode information.")
+
+    async def handle_menu_callback(self, event):
+        """Handle menu button callbacks"""
+        try:
+            data = event.data.decode('utf-8')
+            
+            if data == "menu:modeinfo":
+                await self.show_mode_info(event)
+            elif data == "menu:modestats":
+                await self.show_mode_stats(event)
+            elif data == "menu:help":
+                await self.show_help_menu(event)
+            elif data == "menu:language":
+                await self.show_language_selection(event)
+            elif data == "menu:main":
+                await self.show_main_menu(event)
+            else:
+                await event.answer("Unknown menu option")
+                
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in handle_menu_callback: {e}")
+            await event.answer("❌ An error occurred")
+
+    async def show_mode_info(self, event):
+        """Show mode information in a formatted message"""
+        try:
+            user_id = event.sender_id
+            current_mode = self.user_modes.get(user_id, 'standard')
+            
+            # Get mode display names
+            mode_display = "🧠 SMC Mode" if current_mode == 'smc' else "⚡ Standard Mode"
+            
+            info_message = (
+                f"{lang_manager.get_text('mode_info_title')}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"{lang_manager.get_text('mode_info_current').format(mode=mode_display)}\n\n"
+                
+                f"{lang_manager.get_text('mode_info_standard_title')}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{lang_manager.get_text('mode_info_standard_desc')}\n\n"
+                
+                f"{lang_manager.get_text('mode_info_smc_title')}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{lang_manager.get_text('mode_info_smc_desc')}\n\n"
+                
+                f"{lang_manager.get_text('mode_info_when_title')}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{lang_manager.get_text('mode_info_standard_when')}\n\n"
+                
+                f"{lang_manager.get_text('mode_info_smc_when')}\n\n"
+                
+                f"{lang_manager.get_text('mode_info_switch')}\n"
+                f"{lang_manager.get_text('mode_info_track')}"
+            )
+            
+            buttons = [[Button.inline("🔙 Back to Menu", b"menu:main")]]
+            await event.edit(info_message, buttons=buttons, parse_mode='markdown')
+            
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in show_mode_info: {e}")
+            await event.answer("❌ An error occurred while showing mode info")
+
+    async def show_mode_stats(self, event):
+        """Show mode performance statistics"""
+        try:
+            user_id = event.sender_id
+            
+            # Check if user is admin
+            if not user_manager.is_admin(str(user_id)):
+                await event.answer("❌ This feature is only available to administrators.")
+                return
+            
+            mode_stats = self.get_mode_stats()
+            
+            stats_message = (
+                f"{lang_manager.get_text('mode_stats_title')}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            )
+            
+            for mode, stats in mode_stats.items():
+                mode_emoji = "🧠" if mode == "smc" else "⚡"
+                mode_name = lang_manager.get_text("mode_stats_smc") if mode == "smc" else lang_manager.get_text("mode_stats_standard")
+                
+                win_rate_formatted = f"{stats['win_rate']:.1f}"
+                stats_message += (
+                    f"{mode_emoji} {mode_name}\n"
+                    f"{lang_manager.get_text('mode_stats_wins').format(wins=stats['wins'])}\n"
+                    f"{lang_manager.get_text('mode_stats_losses').format(losses=stats['losses'])}\n"
+                    f"{lang_manager.get_text('mode_stats_total').format(total=stats['total'])}\n"
+                    f"{lang_manager.get_text('mode_stats_winrate').format(winrate=win_rate_formatted)}\n\n"
+                )
+            
+            # Add recommendations
+            standard_win_rate = mode_stats['standard']['win_rate']
+            smc_win_rate = mode_stats['smc']['win_rate']
+            
+            if standard_win_rate > smc_win_rate:
+                recommendation = lang_manager.get_text("mode_stats_better_standard")
+            elif smc_win_rate > standard_win_rate:
+                recommendation = lang_manager.get_text("mode_stats_better_smc")
+            else:
+                recommendation = lang_manager.get_text("mode_stats_similar")
+            
+            stats_message += f"{lang_manager.get_text('mode_stats_recommendation').format(recommendation=recommendation)}"
+            
+            buttons = [[Button.inline(lang_manager.get_text("menu_button_back"), b"menu:main")]]
+            await event.edit(stats_message, buttons=buttons, parse_mode='markdown')
+            
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in show_mode_stats: {e}")
+            await event.answer("❌ An error occurred while showing mode stats")
+
+    async def show_help_menu(self, event):
+        """Show help menu with available commands"""
+        try:
+            help_message = (
+                f"{lang_manager.get_text('help_title')}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"{lang_manager.get_text('help_main_commands')}\n"
+                f"{lang_manager.get_text('help_main_start')}\n"
+                f"{lang_manager.get_text('help_main_help')}\n"
+                f"{lang_manager.get_text('help_main_language')}\n"
+                f"{lang_manager.get_text('help_main_support')}\n\n"
+                
+                f"{lang_manager.get_text('help_analysis_commands')}\n"
+                f"{lang_manager.get_text('help_analysis_desc')}\n\n"
+                
+                f"{lang_manager.get_text('help_mode_commands')}\n"
+                f"{lang_manager.get_text('help_mode_desc')}\n\n"
+                
+                f"{lang_manager.get_text('help_favorites')}\n"
+                f"{lang_manager.get_text('help_favorites_desc')}\n\n"
+                
+                f"{lang_manager.get_text('help_admin_commands')}\n"
+                f"{lang_manager.get_text('help_admin_desc')}"
+            )
+            
+            buttons = [[Button.inline("🔙 Back to Menu", b"menu:main")]]
+            await event.edit(help_message, buttons=buttons, parse_mode='markdown')
+            
+        except Exception as e:
+            print(f"⚠️ [ERROR] Error in show_help_menu: {e}")
+            await event.answer("❌ An error occurred while showing help")
 
 if __name__ == "__main__":
     bot_client = TelegramBotClient()

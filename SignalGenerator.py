@@ -273,6 +273,18 @@ class SignalGenerator:
             rsi = indicators.get("RSI")
             print(f"[DEBUG] RSI: {rsi}")
             
+            # Step 6.5: Enhanced Standard Mode Indicators
+            if mode == 'standard':
+                # Calculate additional indicators for standard mode
+                macd_signal = self.calculate_macd(history_data)
+                bb_signal = self.calculate_bollinger_bands(history_data)
+                ma_signal = self.calculate_moving_averages(history_data)
+                
+                print(f"[DEBUG] Enhanced Standard Mode Indicators:")
+                print(f"  - MACD: {macd_signal}")
+                print(f"  - Bollinger Bands: {bb_signal}")
+                print(f"  - Moving Averages: {ma_signal}")
+            
             # Step 7: Detect market structure
             history_df = pd.DataFrame(history_data, columns=["Timestamp", "Value"])
             structure = self.detect_market_structure(history_df)
@@ -326,43 +338,93 @@ class SignalGenerator:
                 return self.format_smc_signal(signal_type, asset, current_price, zone_price, 
                                             smc_signal["bos_price"], expiration_time_minutes, lang_manager=lang_manager)
             
-            # Step 12: Traditional TA Signal conditions (more flexible)
-            unique_prices = set(history_df["Value"].unique())
-            is_flat_market = len(unique_prices) == 1
-            if is_flat_market:
-                print(f"[DEBUG] Flat market detected - using flexible conditions")
-                threshold = 1
-                buy_rsi_condition = rsi is not None and rsi < 75  # More flexible for BUY
-                sell_rsi_condition = rsi is not None and rsi > 25
+            # Step 12: Enhanced Traditional TA Signal conditions for Standard Mode
+            if mode == 'standard':
+                # Use enhanced indicators for standard mode
+                unique_prices = set(history_df["Value"].unique())
+                is_flat_market = len(unique_prices) == 1
+                
+                if is_flat_market:
+                    print(f"[DEBUG] Flat market detected - using flexible conditions")
+                    threshold = 2  # Lower threshold for flat markets
+                else:
+                    threshold = 3  # Higher threshold for trending markets
+                
+                # Enhanced buy conditions for standard mode
+                buy_conditions = [
+                    self.is_support_zone(current_price, support_levels, tolerance=0.003),
+                    structure in ["bullish", "neutral"],
+                    pattern in ["bullish_engulfing", "pin_bar"],
+                    rsi is not None and rsi < 55,
+                    macd_signal == "bullish" if macd_signal else False,
+                    bb_signal == "oversold" if bb_signal else False,
+                    ma_signal == "bullish" if ma_signal else False
+                ]
+                
+                # Enhanced sell conditions for standard mode
+                sell_conditions = [
+                    self.is_resistance_zone(current_price, resistance_levels, tolerance=0.002),
+                    structure in ["bearish", "neutral"],
+                    pattern in ["bearish_engulfing", "pin_bar"],
+                    rsi is not None and rsi > 55,
+                    macd_signal == "bearish" if macd_signal else False,
+                    bb_signal == "overbought" if bb_signal else False,
+                    ma_signal == "bearish" if ma_signal else False
+                ]
+                
+                buy_score = sum(buy_conditions)
+                sell_score = sum(sell_conditions)
+                
+                print(f"[DEBUG] Enhanced Standard Mode Signal scores - BUY: {buy_score}/{threshold}, SELL: {sell_score}/{threshold}")
+                print(f"[DEBUG] Buy conditions: {buy_conditions}")
+                print(f"[DEBUG] Sell conditions: {sell_conditions}")
+                
+                if buy_score >= threshold:
+                    zone_price = support_levels[0] if support_levels else None
+                    print(f"[DEBUG] BUY signal generated (score: {buy_score}/{threshold})")
+                    return self.format_smc_signal("BUY", asset, current_price, zone_price, zone_price, expiration_time_minutes, lang_manager=lang_manager)
+                elif sell_score >= threshold:
+                    zone_price = resistance_levels[0] if resistance_levels else None
+                    print(f"[DEBUG] SELL signal generated (score: {sell_score}/{threshold})")
+                    return self.format_smc_signal("SELL", asset, current_price, zone_price, zone_price, expiration_time_minutes, lang_manager=lang_manager)
             else:
-                threshold = 2
-                buy_rsi_condition = rsi is not None and rsi < 55  # More flexible for BUY
-                sell_rsi_condition = rsi is not None and rsi > 55
-            buy_conditions = [
-                self.is_support_zone(current_price, support_levels, tolerance=0.003),  # Slightly more tolerant
-                structure in ["bullish", "neutral"],
-                pattern in ["bullish_engulfing", "pin_bar"],
-                buy_rsi_condition
-            ]
-            buy_score = sum(buy_conditions)
-            sell_conditions = [
-                self.is_resistance_zone(current_price, resistance_levels, tolerance=0.002),
-                structure in ["bearish", "neutral"],
-                pattern in ["bearish_engulfing", "pin_bar"],
-                sell_rsi_condition
-            ]
-            sell_score = sum(sell_conditions)
-            print(f"[DEBUG] Traditional TA Signal scores - BUY: {buy_score}/{threshold}, SELL: {sell_score}/{threshold}")
-            print(f"[DEBUG] Buy conditions: {buy_conditions}")
-            print(f"[DEBUG] Sell conditions: {sell_conditions}")
-            if buy_score >= threshold:
-                zone_price = support_levels[0] if support_levels else None
-                print(f"[DEBUG] BUY signal generated (score: {buy_score}/{threshold})")
-                return self.format_smc_signal("BUY", asset, current_price, zone_price, zone_price, expiration_time_minutes, lang_manager=lang_manager)
-            elif sell_score >= threshold:
-                zone_price = resistance_levels[0] if resistance_levels else None
-                print(f"[DEBUG] SELL signal generated (score: {sell_score}/{threshold})")
-                return self.format_smc_signal("SELL", asset, current_price, zone_price, zone_price, expiration_time_minutes, lang_manager=lang_manager)
+                # Original logic for other modes
+                unique_prices = set(history_df["Value"].unique())
+                is_flat_market = len(unique_prices) == 1
+                if is_flat_market:
+                    print(f"[DEBUG] Flat market detected - using flexible conditions")
+                    threshold = 1
+                    buy_rsi_condition = rsi is not None and rsi < 75  # More flexible for BUY
+                    sell_rsi_condition = rsi is not None and rsi > 25
+                else:
+                    threshold = 2
+                    buy_rsi_condition = rsi is not None and rsi < 55  # More flexible for BUY
+                    sell_rsi_condition = rsi is not None and rsi > 55
+                buy_conditions = [
+                    self.is_support_zone(current_price, support_levels, tolerance=0.003),  # Slightly more tolerant
+                    structure in ["bullish", "neutral"],
+                    pattern in ["bullish_engulfing", "pin_bar"],
+                    buy_rsi_condition
+                ]
+                buy_score = sum(buy_conditions)
+                sell_conditions = [
+                    self.is_resistance_zone(current_price, resistance_levels, tolerance=0.002),
+                    structure in ["bearish", "neutral"],
+                    pattern in ["bearish_engulfing", "pin_bar"],
+                    sell_rsi_condition
+                ]
+                sell_score = sum(sell_conditions)
+                print(f"[DEBUG] Traditional TA Signal scores - BUY: {buy_score}/{threshold}, SELL: {sell_score}/{threshold}")
+                print(f"[DEBUG] Buy conditions: {buy_conditions}")
+                print(f"[DEBUG] Sell conditions: {sell_conditions}")
+                if buy_score >= threshold:
+                    zone_price = support_levels[0] if support_levels else None
+                    print(f"[DEBUG] BUY signal generated (score: {buy_score}/{threshold})")
+                    return self.format_smc_signal("BUY", asset, current_price, zone_price, zone_price, expiration_time_minutes, lang_manager=lang_manager)
+                elif sell_score >= threshold:
+                    zone_price = resistance_levels[0] if resistance_levels else None
+                    print(f"[DEBUG] SELL signal generated (score: {buy_score}/{threshold})")
+                    return self.format_smc_signal("SELL", asset, current_price, zone_price, zone_price, expiration_time_minutes, lang_manager=lang_manager)
             
             # Final fallback: Generate signal based on RSI only if no other conditions met
             print(f"[DEBUG] No traditional TA signal - trying RSI-only fallback")
@@ -377,7 +439,7 @@ class SignalGenerator:
                                                 current_price, expiration_time_minutes, lang_manager=lang_manager)
             
             # HOLD Signal (no clear signal)
-            print(f"[DEBUG] HOLD signal - insufficient conditions (BUY: {buy_score}/{threshold}, SELL: {sell_score}/{threshold})")
+            print(f"[DEBUG] HOLD signal - insufficient conditions")
             # Show the nearest support or resistance level for context
             nearest_zone = None
             if support_levels and resistance_levels:
@@ -1236,11 +1298,21 @@ class SignalGenerator:
                             print(f"[SMC] [INFO] Found bearish order block zone: high={ob_high}, low={ob_low}")
                             break
 
+        # --- 5. Detect Fair Value Gaps (FVG) ---
+        fvg = self.detect_fair_value_gap(prices, timestamps)
+        if fvg:
+            print(f"[SMC] [INFO] Found FVG: {fvg}")
+
+        # --- 6. Detect Liquidity Levels ---
+        liquidity_levels = self.detect_liquidity_levels(prices, timestamps)
+        if liquidity_levels:
+            print(f"[SMC] [INFO] Found liquidity levels: {liquidity_levels}")
+
         if not order_block:
             print(f"[SMC] [INFO] No order block found")
             return self.format_smc_signal("HOLD", asset, current_price, None, bos_price, expiration_time_minutes, lang_manager=lang_manager)
 
-        # --- 5. Wait for price to return to OB zone (use zone-based logic) ---
+        # --- 7. Wait for price to return to OB zone (use zone-based logic) ---
         tolerance = 0.003  # Increased to 0.3%
         
         # Use zone-based order block check if available
@@ -1271,7 +1343,7 @@ class SignalGenerator:
             print(f"[SMC] [INFO] Price not in order block area (current: {current_price}, OB: {ob_info})")
             return self.format_smc_signal("HOLD", asset, current_price, order_block.get("price"), bos_price, expiration_time_minutes, lang_manager=lang_manager)
 
-        # --- 6. Relaxed confirmation for bullish SMC ---
+        # --- 8. Relaxed confirmation for bullish SMC ---
         confirmation = False
         if len(prices) >= 3:
             if bos_type == "bullish":
@@ -1288,3 +1360,167 @@ class SignalGenerator:
         else:
             print(f"[SMC] [INFO] No confirmation for SMC signal")
             return self.format_smc_signal("HOLD", asset, current_price, order_block.get("price"), bos_price, expiration_time_minutes, lang_manager=lang_manager)
+
+    def detect_fair_value_gap(self, prices, timestamps):
+        """Detect Fair Value Gaps (FVG) in price data"""
+        fvgs = []
+        for i in range(1, len(prices) - 1):
+            # Bullish FVG: gap between high of previous candle and low of next candle
+            if prices[i-1] < prices[i+1]:  # Gap exists
+                gap_high = prices[i-1]  # High of previous candle
+                gap_low = prices[i+1]   # Low of next candle
+                
+                # Check if gap is significant (at least 0.05%)
+                gap_size = (gap_high - gap_low) / gap_low
+                if gap_size > 0.0005:
+                    fvgs.append({
+                        "type": "bullish",
+                        "index": i,
+                        "high": gap_high,
+                        "low": gap_low,
+                        "size": gap_size,
+                        "timestamp": timestamps[i] if i < len(timestamps) else None
+                    })
+        
+        return fvgs[0] if fvgs else None  # Return first FVG found
+
+    def detect_liquidity_levels(self, prices, timestamps):
+        """Detect potential liquidity levels (equal highs/lows)"""
+        liquidity_levels = []
+        
+        # Look for equal highs (potential resistance)
+        for i in range(1, len(prices) - 1):
+            if abs(prices[i] - prices[i-1]) < 0.0001:  # Equal within 0.01%
+                liquidity_levels.append({
+                    "type": "resistance",
+                    "price": prices[i],
+                    "index": i,
+                    "timestamp": timestamps[i] if i < len(timestamps) else None
+                })
+        
+        # Look for equal lows (potential support)
+        for i in range(1, len(prices) - 1):
+            if abs(prices[i] - prices[i-1]) < 0.0001:  # Equal within 0.01%
+                liquidity_levels.append({
+                    "type": "support",
+                    "price": prices[i],
+                    "index": i,
+                    "timestamp": timestamps[i] if i < len(timestamps) else None
+                })
+        
+        return liquidity_levels[:3] if liquidity_levels else None  # Return first 3 levels
+
+    def calculate_macd(self, history_data, fast=12, slow=26, signal=9):
+        """Calculate MACD signal for enhanced standard mode"""
+        try:
+            if len(history_data) < slow:
+                return None
+            
+            # Extract prices
+            prices = [float(point[1]) for point in history_data]
+            
+            # Calculate EMAs
+            def ema(data, period):
+                alpha = 2 / (period + 1)
+                ema_values = [data[0]]
+                for price in data[1:]:
+                    ema_values.append(alpha * price + (1 - alpha) * ema_values[-1])
+                return ema_values
+            
+            ema_fast = ema(prices, fast)
+            ema_slow = ema(prices, slow)
+            
+            # Calculate MACD line
+            macd_line = [fast_val - slow_val for fast_val, slow_val in zip(ema_fast, ema_slow)]
+            
+            # Calculate signal line
+            signal_line = ema(macd_line, signal)
+            
+            # Get current values
+            current_macd = macd_line[-1]
+            current_signal = signal_line[-1]
+            prev_macd = macd_line[-2] if len(macd_line) > 1 else current_macd
+            prev_signal = signal_line[-2] if len(signal_line) > 1 else current_signal
+            
+            # Determine signal
+            if current_macd > current_signal and prev_macd <= prev_signal:
+                return "bullish"  # MACD crossed above signal line
+            elif current_macd < current_signal and prev_macd >= prev_signal:
+                return "bearish"  # MACD crossed below signal line
+            else:
+                return "neutral"
+                
+        except Exception as e:
+            print(f"[ERROR] MACD calculation failed: {e}")
+            return None
+
+    def calculate_bollinger_bands(self, history_data, period=20, std_dev=2):
+        """Calculate Bollinger Bands signal for enhanced standard mode"""
+        try:
+            if len(history_data) < period:
+                return None
+            
+            # Extract prices
+            prices = [float(point[1]) for point in history_data]
+            current_price = prices[-1]
+            
+            # Calculate SMA
+            sma = sum(prices[-period:]) / period
+            
+            # Calculate standard deviation
+            variance = sum((price - sma) ** 2 for price in prices[-period:]) / period
+            std = variance ** 0.5
+            
+            # Calculate bands
+            upper_band = sma + (std_dev * std)
+            lower_band = sma - (std_dev * std)
+            
+            # Determine signal
+            if current_price <= lower_band:
+                return "oversold"  # Price at or below lower band
+            elif current_price >= upper_band:
+                return "overbought"  # Price at or above upper band
+            else:
+                return "neutral"  # Price within bands
+                
+        except Exception as e:
+            print(f"[ERROR] Bollinger Bands calculation failed: {e}")
+            return None
+
+    def calculate_moving_averages(self, history_data, short_period=10, long_period=20):
+        """Calculate Moving Averages signal for enhanced standard mode"""
+        try:
+            if len(history_data) < long_period:
+                return None
+            
+            # Extract prices
+            prices = [float(point[1]) for point in history_data]
+            
+            # Calculate SMAs
+            short_sma = sum(prices[-short_period:]) / short_period
+            long_sma = sum(prices[-long_period:]) / long_period
+            
+            # Get previous values for trend detection
+            if len(prices) >= long_period + 1:
+                prev_short_sma = sum(prices[-(short_period+1):-1]) / short_period
+                prev_long_sma = sum(prices[-(long_period+1):-1]) / long_period
+                
+                # Determine signal based on crossover
+                if short_sma > long_sma and prev_short_sma <= prev_long_sma:
+                    return "bullish"  # Golden cross
+                elif short_sma < long_sma and prev_short_sma >= prev_long_sma:
+                    return "bearish"  # Death cross
+                else:
+                    return "neutral"  # No crossover
+            else:
+                # Simple comparison if not enough data for crossover
+                if short_sma > long_sma:
+                    return "bullish"
+                elif short_sma < long_sma:
+                    return "bearish"
+                else:
+                    return "neutral"
+                    
+        except Exception as e:
+            print(f"[ERROR] Moving Averages calculation failed: {e}")
+            return None
