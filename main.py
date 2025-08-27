@@ -41,7 +41,7 @@ class TelegramBotClient:
 
         self.api_id = "26422824"
         self.api_hash = "3c8f82c213fbd41b275b8b921d8ed946"
-        self.bot_token = "8129679884:AAGEbC-P6_YFQFzERMiV2UevFx6uXAqSUhs"
+        self.bot_token = "8129679884:AAGg80cRWQy-ajwMz6Z9IF0kCxcasT_84Bg"
         
         # Initialize with default admin
         self.default_admin_id = "1885741502"  # Replace with your Telegram ID
